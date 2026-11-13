@@ -20,12 +20,27 @@
   /* Game menu */
   .menu { list-style: none; padding: 0; margin: 0 0 24px; display: flex; flex-direction: column; gap: 6px; }
   .menu a {
-    display: block; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px;
-    background: var(--surface); color: var(--text); font-weight: 500; text-decoration: none;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+    padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface); color: var(--text); text-decoration: none;
   }
   .menu a:hover { border-color: var(--muted); }
-  .menu a[aria-current="true"] { border-color: var(--accent); background: var(--tint); color: var(--accent); }
-  .menu .basics a { font-weight: 700; }
+  .menu a[aria-current="true"] { border-color: var(--accent); background: var(--tint); }
+  .menu a[aria-current="true"] .name { color: var(--accent); }
+  .menu .text { flex: 1 1 220px; min-width: 0; }
+  .menu .name { display: block; font-weight: 600; }
+  .menu .basics .name { font-weight: 700; }
+  .menu .desc { display: block; font-size: 0.85rem; line-height: 1.35; color: var(--muted); }
+  .menu .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag {
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap;
+    padding: 2px 9px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--muted);
+  }
+  .tag.multi {
+    color: var(--accent); background: var(--tint);
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  }
 
   /* Game sections: only the one in the URL hash is shown */
   section {
@@ -63,16 +78,44 @@
 
   <nav aria-label="Games">
     <ul class="menu">
-      <li class="basics"><a href="#basics">House basics</a></li>
-      <li><a href="#guts">2-Card Guts</a></li>
-      <li><a href="#iron-cross">Iron Cross</a></li>
-      <li><a href="#challenge">Challenge</a></li>
-      <li><a href="#five-draw">5-Card Draw</a></li>
-      <li><a href="#five-stud">5-Card Stud</a></li>
-      <li><a href="#seven-stud">7-Card Stud</a></li>
-      <li><a href="#chicago">High/Low Chicago</a></li>
-      <li><a href="#anaconda">Anaconda</a></li>
-      <li><a href="#in-between">In-Between</a></li>
+      <li class="basics"><a href="#basics">
+        <span class="text"><span class="name">House basics</span><span class="desc">Ante, betting limits, picking games, the $3 cap. Read this first.</span></span>
+      </a></li>
+      <li><a href="#guts">
+        <span class="text"><span class="name">2-Card Guts</span><span class="desc">Two cards. Hold or drop. Losers match the pot.</span></span>
+        <span class="tags"><span class="tag multi">Multi-hand</span><span class="tag">Match the pot</span></span>
+      </a></li>
+      <li><a href="#iron-cross">
+        <span class="text"><span class="name">Iron Cross</span><span class="desc">Rules coming soon.</span></span>
+      </a></li>
+      <li><a href="#challenge">
+        <span class="text"><span class="name">Challenge</span><span class="desc">Go in, get challenged. First to four kerns takes the pot.</span></span>
+        <span class="tags"><span class="tag multi">Multi-hand</span><span class="tag">Challenges</span></span>
+      </a></li>
+      <li><a href="#five-draw">
+        <span class="text"><span class="name">5-Card Draw</span><span class="desc">The classic. Five cards, one draw.</span></span>
+        <span class="tags"><span class="tag">One hand</span><span class="tag">Betting</span></span>
+      </a></li>
+      <li><a href="#five-stud">
+        <span class="text"><span class="name">5-Card Stud</span><span class="desc">One down, four up.</span></span>
+        <span class="tags"><span class="tag">One hand</span><span class="tag">Betting</span></span>
+      </a></li>
+      <li><a href="#seven-stud">
+        <span class="text"><span class="name">7-Card Stud</span><span class="desc">Two down, four up, one down. Best five of seven.</span></span>
+        <span class="tags"><span class="tag">One hand</span><span class="tag">Betting</span></span>
+      </a></li>
+      <li><a href="#chicago">
+        <span class="text"><span class="name">High/Low Chicago</span><span class="desc">7-card stud. Half the pot goes to the best face-down spade.</span></span>
+        <span class="tags"><span class="tag">One hand</span><span class="tag">Betting</span></span>
+      </a></li>
+      <li><a href="#anaconda">
+        <span class="text"><span class="name">Anaconda</span><span class="desc">Seven cards. Pass 3, 2, then 1. Best five wins.</span></span>
+        <span class="tags"><span class="tag">One hand</span><span class="tag">Betting</span></span>
+      </a></li>
+      <li><a href="#in-between">
+        <span class="text"><span class="name">In-Between</span><span class="desc">Bet the next card lands between your two.</span></span>
+        <span class="tags"><span class="tag multi">Multi-hand</span><span class="tag">Bet vs. pot</span></span>
+      </a></li>
     </ul>
   </nav>
 
