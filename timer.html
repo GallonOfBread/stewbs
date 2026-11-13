@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PiP Timer</title>
+<title>Workout Timer</title>
 <meta name="description" content="A workout timer that floats over your other windows, rotates through lifters, and shows which plates to load.">
-<meta property="og:title" content="PiP Timer">
+<meta property="og:title" content="Workout Timer">
 <meta property="og:description" content="A workout timer that floats over your other windows, rotates through lifters, and shows which plates to load.">
 <meta name="theme-color" content="#ffffff">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -67,7 +67,18 @@
   #display { font-size: 56px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; margin: 6px 0; }
   #status { font-size: 0.85rem; color: var(--muted); min-height: 1em; margin-top: 10px; }
   .now svg.plates { height: 120px; }
-  video, canvas { display: none; }
+
+  /* During a workout the settings tuck away behind the gear, and the timer takes the card */
+  .topbar .gear { display: none; padding: 6px 10px; align-items: center; }
+  .topbar .gear[aria-expanded="true"] { border-color: var(--accent); color: var(--accent); }
+  .in-session .topbar .gear { display: flex; }
+  .in-session:not(.show-setup) #setup,
+  .in-session:not(.show-setup) .card > .kicker,
+  .in-session:not(.show-setup) .card > h1 { display: none; }
+  .in-session:not(.show-setup) .now { border-top: 0; margin-top: 0; padding-top: 0; font-size: 1.2rem; }
+  .in-session:not(.show-setup) #display { font-size: clamp(72px, 22vw, 150px); margin: 10px 0; }
+  .in-session:not(.show-setup) .now svg.plates { height: 180px; }
+  .in-session:not(.show-setup) .actions button { flex: 1; font-size: 1.3rem; padding: 16px; }
 </style>
 <!-- Shared by the main page and the PiP window (copied into it when it opens) -->
 <style id="now-css">
@@ -94,14 +105,18 @@
   <nav class="topbar">
     <a class="home" href="/"><svg class="lucide" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>stewbs</a>
     <div class="topbar-actions">
+      <button type="button" class="gear" id="gear" aria-expanded="false" aria-controls="setup" aria-label="Settings" title="Settings">
+        <svg class="lucide" viewBox="0 0 24 24" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
       <button type="button" class="switch" data-theme-toggle role="switch" aria-label="Dark mode" title="Dark mode"></button>
     </div>
   </nav>
 
   <div class="card">
     <p class="kicker">Picture-in-Picture</p>
-    <h1>Timer</h1>
+    <h1>Workout Timer</h1>
 
+    <div id="setup">
     <div class="time-inputs">
       <input id="min" type="number" min="0" value="3" aria-label="Minutes"> :
       <input id="sec" type="number" min="0" max="59" value="00" aria-label="Seconds">
@@ -127,6 +142,7 @@
         <button class="ghost" id="copy">Copy link</button>
       </div>
     </div>
+    </div>
 
     <div class="section now">
       <div id="who"></div>
@@ -141,13 +157,8 @@
   </div>
 </main>
 
-<canvas id="canvas" width="480" height="270"></canvas>
-<video id="pip" playsinline muted></video>
-
 <script>
 const $ = id => document.getElementById(id);
-const canvas = $('canvas'), ctx = canvas.getContext('2d');
-const pip = $('pip');
 const useDocPip = 'documentPictureInPicture' in window;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const num = x => +(+x).toFixed(2);   // tidy floats for display (e.g. 2.5, not 2.4999)
@@ -422,7 +433,6 @@ function renderNow() {
   const who = whoHTML(), plates = platesHTML();
   $('who').innerHTML = who; $('plates').innerHTML = plates;
   if (ui) { ui.who.innerHTML = who; ui.plates.innerHTML = plates; }
-  if (!ui && document.pictureInPictureElement && state === 'idle') drawCanvas(fmt(inputMs()));
 }
 
 function refresh() {
@@ -449,18 +459,6 @@ const inputMs = () => ((+$('min').value || 0) * 60 + (+$('sec').value || 0)) * 1
 function showTime(ms) {
   $('display').textContent = fmt(ms);
   if (ui) ui.t.textContent = fmt(ms);
-}
-
-function drawCanvas(text, bg = '#000', fg = '#fff', size = 110) {
-  ctx.fillStyle = bg; ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = fg; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  const p = cfg.people[cur], t = targets[cur];
-  if (p) {
-    ctx.font = 'bold 34px -apple-system, sans-serif';
-    ctx.fillText([p.name, t && num(t.total)].filter(Boolean).join('  ·  '), canvas.width / 2, 44);
-  }
-  ctx.font = `bold ${size}px -apple-system, sans-serif`;
-  ctx.fillText(text, canvas.width / 2, p ? 160 : canvas.height / 2);
 }
 
 function beep() {
@@ -499,61 +497,76 @@ async function openDocPip() {
   d.documentElement.dataset.theme = document.documentElement.dataset.theme;
   d.head.innerHTML = `<link rel="stylesheet" href="${new URL('/site.css', location.href)}">
   <style>${$('now-css').textContent}</style><style>
-    body { margin:0; height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1vh;
-           background:var(--bg); color:var(--text); font-family:var(--font); font-size:clamp(13px, 4.2vmin, 30px);
-           text-align:center; transition:background .15s; padding:2vh 4vw; box-sizing:border-box; overflow:hidden; }
+    /* Portrait: one column. Square and landscape: name + timer on the left, plates on the right. */
+    body { margin:0; height:100vh; display:flex; flex-direction:column; gap:2vmin; padding:3vmin 4vmin;
+           background:var(--bg); color:var(--text); font-family:var(--font); font-size:clamp(13px, min(4.4vw, 3.3vh), 30px);
+           text-align:center; box-sizing:border-box; overflow:hidden; }
     body.flash { background:var(--accent); color:#fff; }
-    body.flash .muted, body.flash .meta, body.flash .changes, body.flash .next, body.flash .wt { color:#fff; }
-    #t { font-size:min(22vw, 20vh); line-height:1; font-weight:600; font-variant-numeric:tabular-nums; }
-    #t.done { font-size:min(13vw, 12vh); font-weight:700; }
-    .now { width:100%; }
-    .now svg.plates { height:24vh; }
-    .row { display:flex; gap:min(3vw, 3vh); width:100%; margin-top:auto; }
-    .row button { flex:1; height:clamp(36px, 13vh, 110px); border-radius:clamp(8px, 2.5vh, 18px);
+    body.flash .now .muted, body.flash .now .meta, body.flash .now .changes, body.flash .now .next,
+    body.flash .now .who .wt, body.flash .now .err { color:#fff; }
+    body.flash .chip { box-shadow:0 0 0 2px #fff; }
+    body.flash .row .primary { background:#fff; color:var(--accent); border-color:#fff; }
+    .main { flex:1; min-height:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2vh; }
+    .left, #plates { width:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.3em; }
+    #t { font-size:min(24vw, 19vh); line-height:1; font-weight:600; font-variant-numeric:tabular-nums; }
+    #t.done { font-size:min(15vw, 12vh); font-weight:700; }
+    .now svg.plates { height:min(22vh, 45vw); margin:0 auto; }
+    .row { display:flex; gap:3vmin; width:100%; }
+    .row button { flex:1; height:clamp(40px, 12vh, 110px); border-radius:clamp(8px, 2.5vh, 18px);
              font:700 clamp(14px, min(6vw, 6vh), 40px) var(--font); cursor:pointer; }
+    @media (min-aspect-ratio: 11/10) {
+      body { font-size:clamp(13px, min(2.8vw, 4.6vh), 30px); }
+      .main { flex-direction:row; gap:4vw; }
+      .now .who b, .now .who .wt { font-size:2em; }
+      .left, #plates { flex:1; min-width:0; height:100%; }
+      #t { font-size:min(17vw, 30vh); }
+      #t.done { font-size:min(8.5vw, 16vh); }
+      .now svg.plates { height:min(36vh, 28vw); }
+      .row button { font-size:clamp(14px, min(4vw, 6vh), 40px); }
+    }
     .primary { background:var(--accent); color:#fff; border:1px solid var(--accent); }
     .neutral { background:var(--surface); color:var(--text); border:1px solid var(--line); }
     .neutral:hover:not(:disabled) { border-color:var(--muted); }
     .row button:disabled { opacity:.45; cursor:default; }
   </style>`;
-  d.body.innerHTML = `<div class="now" style="margin-top:auto"><div id="who"></div></div><div id="t"></div>
-    <div class="now"><div id="plates"></div></div>
+  d.body.innerHTML = `<div class="main now"><div class="left"><div id="who"></div><div id="t"></div></div><div id="plates"></div></div>
     <div class="row"><button id="l" class="neutral"></button><button id="r" class="primary"></button></div>`;
   ui = { body: d.body, t: d.getElementById('t'), who: d.getElementById('who'), plates: d.getElementById('plates'),
          l: d.getElementById('l'), r: d.getElementById('r') };
   ui.l.onclick = onLeft;
   ui.r.onclick = onRight;
   d.body.addEventListener('click', onNowClick);
-  pipWin.addEventListener('pagehide', () => { pipWin = ui = null; cancel(); });
+  pipWin.addEventListener('pagehide', () => { pipWin = ui = null; cancel(); setSession(false); });
 }
+
+// ---- Session: once the timer starts, the settings tuck away behind the gear ----
+function setSession(on) {
+  document.body.classList.toggle('in-session', on);
+  showSetup(false);
+}
+function showSetup(on) {
+  document.body.classList.toggle('show-setup', on);
+  $('gear').setAttribute('aria-expanded', String(on));
+}
+$('gear').onclick = () => showSetup(!document.body.classList.contains('show-setup'));
 
 // Keep the PiP window's light/dark theme in sync with the page's toggle
 new MutationObserver(() => {
   if (pipWin) pipWin.document.documentElement.dataset.theme = document.documentElement.dataset.theme;
 }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
-// ---- Safari fallback: video PiP showing a drawn canvas (no buttons inside it) ----
-async function openVideoPip() {
-  drawCanvas(fmt(inputMs()));
-  pip.srcObject = canvas.captureStream(10);
-  pip.muted = true;
-  await pip.play();
-  await pip.requestPictureInPicture();
-  try { navigator.mediaSession.setActionHandler('nexttrack', () => { if (state === 'done' || state === 'idle') onRight(); }); } catch {}
-}
-pip.addEventListener('leavepictureinpicture', () => { if (!useDocPip && state !== 'idle') cancel(); });
-
 async function start() {
   totalMs = inputMs();
   if (totalMs <= 0) return;
-  try {
-    // Browsers only allow PiP from a click, so it opens now.
-    if (useDocPip) { if (!pipWin) await openDocPip(); }
-    else if (document.pictureInPictureEnabled) { if (!document.pictureInPictureElement) await openVideoPip(); }
-    else $('status').textContent = 'Picture-in-Picture isn\'t supported here, so the timer runs on this page.';
-  } catch (err) {
-    $('status').textContent = 'Couldn\'t open PiP: ' + err.message;
+  // The floating window is Chrome/Edge on a computer only; anywhere else the timer runs on this page.
+  // Browsers only allow it to open from a click, so it opens now.
+  if (useDocPip && !pipWin) {
+    try { await openDocPip(); }
+    catch (err) { $('status').textContent = 'Couldn\'t open the floating window: ' + err.message; }
+  } else if (!useDocPip) {
+    $('status').textContent = 'The floating window needs Chrome or Edge on a computer, so the timer runs here.';
   }
+  setSession(true);
   clearAlarm();
   finished = false; pausedLeft = null;
   if (cfg.people.length && targets[cur]) loaded = stacks[cur];
@@ -580,7 +593,7 @@ function resume() {
 
 function clearAlarm() {
   if (ui) { ui.t.classList.remove('done'); ui.body.classList.remove('flash'); }
-  document.title = 'PiP Timer';
+  document.title = 'Workout Timer';
 }
 
 // Cancel / Stop: end this person's timer and go back to the full time, same person.
@@ -604,14 +617,12 @@ function tick() {
   const left = endTime - Date.now();
   if (left > 0) {
     showTime(left);
-    if (!ui && document.pictureInPictureElement) drawCanvas(fmt(left));
     return;
   }
   if (!finished) { finished = true; timesUp(); }
   flash = !flash;
   $('display').textContent = "Time's up";
   if (ui) { ui.t.textContent = "TIME'S UP"; ui.t.classList.add('done'); ui.body.classList.toggle('flash', flash); }
-  else if (document.pictureInPictureElement) drawCanvas("TIME'S UP", flash ? '#c62d28' : '#000', '#fff', 64);
 }
 
 function timesUp() {
