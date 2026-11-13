@@ -26,6 +26,7 @@
   }
   .menu a:hover { border-color: var(--link); }
   .menu a[aria-current="true"] { border-color: var(--link); background: var(--accent-bg); color: var(--link); }
+  .menu .basics a { font-weight: 600; }
 
   /* Game sections: only the one in the URL hash is shown */
   section {
@@ -55,6 +56,7 @@
 
   <nav>
     <ul class="menu">
+      <li class="basics"><a href="#basics">House basics</a></li>
       <li><a href="#guts">2-Card Guts</a></li>
       <li><a href="#iron-cross">Iron Cross</a></li>
       <li><a href="#challenge">Challenge</a></li>
@@ -62,6 +64,37 @@
       <li><a href="#anaconda">Anaconda</a></li>
     </ul>
   </nav>
+
+  <section id="basics">
+    <h2>House basics</h2>
+    <p class="tagline">These apply to every game unless the game says otherwise.</p>
+
+    <h3>Picking the game</h3>
+    <ul>
+      <li>The dealer picks the game and calls any options, like the weenie rule in Guts or High vs. Low in Chicago.</li>
+      <li><strong>One-hand games:</strong> after the hand, the deal moves one seat clockwise and the new dealer picks.</li>
+      <li><strong>Multi-hand games</strong> like Guts: the deal moves clockwise every hand until the game ends. The next game is picked by the player clockwise of whoever picked the last one.</li>
+    </ul>
+
+    <h3>Ante</h3>
+    <p>Everyone antes a <strong>dime</strong> to start each game.</p>
+
+    <h3>Betting</h3>
+    <ul>
+      <li>Bets are <strong>5¢ to 25¢</strong>.</li>
+      <li>Raises are up to 25¢, with a maximum of <strong>3 raises per betting round</strong>.</li>
+      <li>The highest showing hand bets first. You can check if nobody has bet yet.</li>
+    </ul>
+
+    <h3>Hands</h3>
+    <ul>
+      <li>Normal poker hand rankings. No wild cards.</li>
+      <li>Ties split.</li>
+    </ul>
+
+    <h3>The $3 cap</h3>
+    <p>No single decision can cost you more than <strong>$3</strong>. In "match the pot" games, that means you pay at most $3 when you match. In betting games, the betting limits already keep each decision well under $3. You can still win a pot of any size.</p>
+  </section>
 
   <section id="guts">
     <h2>2-Card Guts</h2>
@@ -72,7 +105,7 @@
     <h3>Setup</h3>
     <ul>
       <li>The dealer picks the game and has to say whether the <strong>weenie rule</strong> is on.</li>
-      <li>Everyone antes a dime. That's the starting pot.</li>
+      <li>Everyone antes a dime. That's the starting pot. Nobody antes again for the rest of the game.</li>
       <li>The dealer deals two cards to each player, plus a two-card <strong>dummy hand</strong> face down in the middle.</li>
     </ul>
 
@@ -107,16 +140,16 @@
     <p>If nobody goes in, everyone flips. The player with the <strong>best</strong> hand is the weenie and has to match the pot. (You had the cards and you chickened out.) If two or more players tie for best, each of them pays. Then the game keeps going.</p>
     <p>If the dealer didn't call the weenie rule and nobody goes in, nobody pays. The deal just moves on.</p>
 
-    <h3>The $3 cap</h3>
-    <p>Whenever you "match the pot," you only pay up to <strong>$3</strong>. You can never lose more than $3 on one hand, but you can win a pot of any size.</p>
+    <h3>Matching is capped at $3</h3>
+    <p>Every "match the pot" here falls under the <a href="#basics">$3 cap</a>.</p>
     <p class="callout">Example: the pot is $5.40 and you lose. You put in $3, not $5.40.</p>
     <p>After the ante, the only ways to lose money are going in and losing, or being the weenie.</p>
 
-    <h3>Dealing and ending the game</h3>
+    <h3>Ending the game</h3>
     <ul>
       <li>The deal moves one seat clockwise every hand.</li>
       <li>The game ends when someone goes in alone and beats the dummy.</li>
-      <li>The next game is picked by the player to the left (clockwise) of whoever picked this one, the same as all our multi-hand games.</li>
+      <li>The next game is picked the usual <a href="#basics">multi-hand way</a>.</li>
     </ul>
   </section>
 
@@ -132,7 +165,39 @@
 
   <section id="chicago">
     <h2>High/Low Chicago</h2>
-    <p class="soon">Rules coming soon.</p>
+    <p class="tagline">Seven-card stud with a spade split</p>
+
+    <p class="callout"><strong>The short version:</strong> it's seven-card stud. Half the pot goes to the best hand. The other half goes to whoever has the highest spade face down (High Chicago) or the lowest spade face down (Low Chicago).</p>
+
+    <h3>Calling it</h3>
+    <ul>
+      <li><strong>High Chicago:</strong> the highest spade in the hole wins half. The A♠ is the best.</li>
+      <li><strong>Low Chicago:</strong> the lowest spade in the hole wins half. The 2♠ is the best, and aces are high.</li>
+    </ul>
+    <p>Only <strong>face-down</strong> spades count. A spade showing face up does nothing for the spade half.</p>
+
+    <h3>The deal</h3>
+    <ol>
+      <li>Everyone antes a dime.</li>
+      <li>Two cards down and one card up to each player. Betting round.</li>
+      <li>One more card up. Betting round.</li>
+      <li>One more card up. Betting round.</li>
+      <li>One more card up. Betting round.</li>
+      <li>The last card goes face down. Final betting round.</li>
+    </ol>
+    <p>That's five betting rounds, with the normal <a href="#basics">house limits</a>. The highest showing hand bets first each round.</p>
+
+    <h3>Showdown</h3>
+    <ul>
+      <li>Everyone still in makes their best five-card hand out of their seven cards. The best hand takes half the pot.</li>
+      <li>Everyone still in flips their face-down cards. The best spade for the game called (highest or lowest) takes the other half.</li>
+      <li><strong>You have to stay in to the end</strong> to win either half. Fold and your spade doesn't count.</li>
+      <li>If nobody still in has a face-down spade, the best hand takes the whole pot.</li>
+      <li>One player can win both halves (a scoop).</li>
+      <li>If the pot doesn't split evenly, the extra cent goes to the best hand.</li>
+      <li>Ties for best hand split that half.</li>
+    </ul>
+    <p class="callout">Example (High Chicago): the pot is $3.20. Ann has a full house, and Ben has the K♠ face down, which is the highest spade still in. Ann gets $1.60 and Ben gets $1.60. If Ann also had the A♠ face down, she'd take all $3.20.</p>
   </section>
 
   <section id="anaconda">
