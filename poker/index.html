@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Poker Variants</title>
+<style>
+  :root { --bg: #fafaf7; --fg: #1a1a1a; --muted: #666; --card: #fff; --border: #e3e3dd; --link: #0a5bd3; --accent-bg: #eef3fc; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111; --fg: #eee; --muted: #999; --card: #1c1c1e; --border: #2c2c2e; --link: #6ea8ff; --accent-bg: #1a2433; }
+  }
+  body {
+    margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--fg); padding: 48px 16px; line-height: 1.5;
+  }
+  main { max-width: 640px; margin: 0 auto; }
+  a { color: var(--link); text-decoration: none; }
+  h1 { font-size: 28px; margin: 16px 0 8px; }
+  .intro { color: var(--muted); margin: 0 0 24px; }
+
+  /* Game menu */
+  .menu { list-style: none; padding: 0; margin: 0 0 24px; display: flex; flex-direction: column; gap: 6px; }
+  .menu a {
+    display: block; padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--card); color: var(--fg); font-weight: 500;
+  }
+  .menu a:hover { border-color: var(--link); }
+  .menu a[aria-current="true"] { border-color: var(--link); background: var(--accent-bg); color: var(--link); }
+
+  /* Game sections: only the one in the URL hash is shown */
+  section {
+    display: none;
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px 22px; scroll-margin-top: 16px;
+  }
+  section:target { display: block; }
+  h2 { font-size: 22px; margin: 0 0 4px; }
+  .tagline { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
+  h3 { font-size: 16px; margin: 20px 0 6px; }
+  section p, section li { font-size: 15px; }
+  section p { margin: 0 0 8px; }
+  section ul, section ol { margin: 0 0 8px; padding-left: 22px; }
+  section li { margin-bottom: 4px; }
+  .callout {
+    background: var(--accent-bg); border-radius: 8px; padding: 10px 14px; margin: 8px 0;
+  }
+  .soon { color: var(--muted); font-size: 14px; margin: 0; }
+</style>
+</head>
+<body>
+<main>
+  <a href="/">&larr; stewbs.com</a>
+  <h1>Poker Variants</h1>
+  <p class="intro">House rules for the games we play. Pick one.</p>
+
+  <nav>
+    <ul class="menu">
+      <li><a href="#guts">2-Card Guts</a></li>
+      <li><a href="#iron-cross">Iron Cross</a></li>
+      <li><a href="#challenge">Challenge</a></li>
+      <li><a href="#chicago">High/Low Chicago</a></li>
+      <li><a href="#anaconda">Anaconda</a></li>
+    </ul>
+  </nav>
+
+  <section id="guts">
+    <h2>2-Card Guts</h2>
+    <p class="tagline">With the weenie rule (if the dealer says so)</p>
+
+    <p class="callout"><strong>The short version:</strong> everyone gets two cards and decides whether they're in. The best hand takes the pot, and everyone else who went in has to match it. The game keeps going until someone goes in alone and beats the dummy.</p>
+
+    <h3>Setup</h3>
+    <ul>
+      <li>The dealer picks the game and has to say whether the <strong>weenie rule</strong> is on.</li>
+      <li>Everyone antes a dime. That's the starting pot.</li>
+      <li>The dealer deals two cards to each player, plus a two-card <strong>dummy hand</strong> face down in the middle.</li>
+    </ul>
+
+    <h3>The drop</h3>
+    <ol>
+      <li>Everyone looks at their cards, then holds them up over the table in a circle.</li>
+      <li>The dealer counts: <em>"3, 2, 1, drop."</em></li>
+      <li>On "drop," <strong>let go of your cards to fold.</strong> Keep holding them if you're in.</li>
+      <li>Everyone still holding cards flips them over.</li>
+    </ol>
+
+    <h3>What beats what</h3>
+    <ul>
+      <li>Any pair beats any non-pair. Higher pair wins.</li>
+      <li>No pair? Highest card wins, then the second card. Aces are high.</li>
+      <li>No straights or flushes. Suits don't matter.</li>
+      <li>Ties split.</li>
+    </ul>
+
+    <h3>Who pays, who wins</h3>
+    <p><strong>Two or more players in:</strong> the best hand drags the pot. Everyone else who went in matches the pot, and that money becomes the pot for the next hand.</p>
+    <p><strong>One player in:</strong> they play the dummy. The dummy gets flipped:</p>
+    <ul>
+      <li>Beat the dummy and you take the pot. <strong>Game over.</strong></li>
+      <li>Lose to the dummy and you match the pot. Keep playing.</li>
+    </ul>
+    <p><strong>Nobody in:</strong> it depends on the weenie rule.</p>
+
+    <h3>The weenie rule</h3>
+    <p>If nobody goes in, everyone flips. The player with the <strong>best</strong> hand is the weenie and has to match the pot. (You had the cards and you chickened out.) Then the game keeps going.</p>
+    <p>If the dealer didn't call the weenie rule and nobody goes in, nobody pays. The deal just moves on.</p>
+
+    <h3>The $3 cap</h3>
+    <p>Whenever you "match the pot," you only pay up to <strong>$3</strong>. You can never lose more than $3 on one hand, but you can win a pot of any size.</p>
+    <p class="callout">Example: the pot is $5.40 and you lose. You put in $3, not $5.40.</p>
+    <p>After the ante, the only ways to lose money are going in and losing, or being the weenie.</p>
+
+    <h3>Dealing and ending the game</h3>
+    <ul>
+      <li>The deal moves one seat clockwise every hand.</li>
+      <li>The game ends when someone goes in alone and beats the dummy.</li>
+      <li>The next game is picked by the player to the left (clockwise) of whoever picked this one, the same as all our multi-hand games.</li>
+    </ul>
+  </section>
+
+  <section id="iron-cross">
+    <h2>Iron Cross</h2>
+    <p class="soon">Rules coming soon.</p>
+  </section>
+
+  <section id="challenge">
+    <h2>Challenge</h2>
+    <p class="soon">Rules coming soon.</p>
+  </section>
+
+  <section id="chicago">
+    <h2>High/Low Chicago</h2>
+    <p class="soon">Rules coming soon.</p>
+  </section>
+
+  <section id="anaconda">
+    <h2>Anaconda</h2>
+    <p class="soon">Rules coming soon.</p>
+  </section>
+</main>
+<script>
+  // Highlight the menu item for the game being shown.
+  function markCurrent() {
+    document.querySelectorAll('.menu a').forEach(function (a) {
+      a.setAttribute('aria-current', a.getAttribute('href') === location.hash ? 'true' : 'false');
+    });
+  }
+  window.addEventListener('hashchange', markCurrent);
+  markCurrent();
+</script>
+</body>
+</html>
