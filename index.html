@@ -4,33 +4,43 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>stewbs</title>
+<meta name="description" content="Josh Stubler's place for simple pages.">
+<meta property="og:title" content="stewbs">
+<meta property="og:description" content="Josh Stubler's place for simple pages.">
+<meta name="theme-color" content="#ffffff">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/site.css">
+<script src="/theme.js"></script>
 <style>
-  :root { --bg: #fafaf7; --fg: #1a1a1a; --muted: #666; --link: #0a5bd3; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #111; --fg: #eee; --muted: #999; --link: #6ea8ff; }
+  :root { --page-width: 560px; }
+  .intro { color: var(--muted); margin: 0 0 28px; }
+  .pages { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+  .pages a {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 16px;
+    padding: 14px 18px; border: 1px solid var(--line); border-radius: 12px;
+    background: var(--surface); color: var(--text); text-decoration: none;
   }
-  body {
-    margin: 0; min-height: 100vh; display: grid; place-items: center;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background: var(--bg); color: var(--fg); padding: 0 16px;
-  }
-  main { max-width: 480px; }
-  h1 { font-size: 28px; margin: 0 0 8px; }
-  p { color: var(--muted); line-height: 1.5; margin: 0 0 24px; }
-  ul { list-style: none; padding: 0; margin: 0; }
-  li { margin: 8px 0; }
-  a { color: var(--link); text-decoration: none; font-size: 18px; }
-  a:hover { text-decoration: underline; }
+  .pages a:hover { border-color: var(--accent); }
+  .pages strong { font-size: 1.1rem; }
+  .pages span { color: var(--muted); font-size: 0.9rem; text-align: right; }
 </style>
 </head>
 <body>
-<main>
+<main class="page">
+  <nav class="topbar">
+    <div class="topbar-actions">
+      <button type="button" class="switch" data-theme-toggle role="switch" aria-label="Dark mode" title="Dark mode"></button>
+    </div>
+  </nav>
+
+  <p class="kicker">stewbs.com</p>
   <h1>I'm Josh Stubler.</h1>
-  <p>This is a site for me to keep simple pages.</p>
-  <ul>
-    <li><a href="/uno">Spicy Uno</a></li>
-    <li><a href="/poker">Poker variants</a></li>
-    <li><a href="/timer">Timer</a></li>
+  <p class="intro">This is a site for me to keep simple pages.</p>
+
+  <ul class="pages">
+    <li><a href="/uno"><strong>Spicy Uno</strong><span>House rulebook</span></a></li>
+    <li><a href="/poker"><strong>Poker Variants</strong><span>Guts, Chicago, and more</span></a></li>
+    <li><a href="/timer"><strong>Timer</strong><span>Picture-in-Picture countdown</span></a></li>
   </ul>
 </main>
 </body>
