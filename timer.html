@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PiP Timer</title>
-<meta name="description" content="A countdown timer that floats over your other windows using Picture-in-Picture.">
+<meta name="description" content="A workout timer that floats over your other windows, rotates through lifters, and shows which plates to load.">
 <meta property="og:title" content="PiP Timer">
-<meta property="og:description" content="A countdown timer that floats over your other windows using Picture-in-Picture.">
+<meta property="og:description" content="A workout timer that floats over your other windows, rotates through lifters, and shows which plates to load.">
 <meta name="theme-color" content="#ffffff">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
@@ -15,33 +15,78 @@
 <script src="/theme.js"></script>
 <style>
   .card {
-    max-width: 400px; margin: 0 auto; padding: 28px;
+    max-width: 560px; margin: 0 auto; padding: 28px;
     background: var(--surface); border: 1px solid var(--line); border-radius: 16px; text-align: center;
   }
+  @media (max-width: 480px) { .card { padding: 20px 14px; } }
   .card h1 { margin-bottom: 20px; }
-  .time-inputs { display: flex; gap: 8px; justify-content: center; align-items: center; font-size: 32px; color: var(--muted); }
-  .time-inputs input {
-    width: 90px; font: 600 32px var(--font); text-align: center; padding: 6px;
-    background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
-  }
-  .presets { margin: 14px 0; display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
   .card button { font-family: var(--font); cursor: pointer; }
-  .presets button {
+  .card input { font-family: var(--font); background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; }
+  .time-inputs { display: flex; gap: 8px; justify-content: center; align-items: center; font-size: 32px; color: var(--muted); }
+  .time-inputs input { width: 90px; font-size: 32px; font-weight: 600; text-align: center; padding: 6px; }
+  .presets { margin: 14px 0; display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .presets button, .ghost {
     background: var(--bg); color: var(--text); border: 1px solid var(--line);
     padding: 6px 12px; border-radius: 8px; font-size: 0.9rem; font-weight: 600;
   }
-  .presets button:hover { border-color: var(--muted); }
-  label.file { display: block; margin: 16px 0; font-size: 0.85rem; color: var(--muted); }
-  label.file input { margin-top: 6px; max-width: 100%; color: var(--muted); font-family: var(--font); }
-  .actions { display: flex; gap: 8px; justify-content: center; }
+  .presets button:hover, .ghost:hover { border-color: var(--muted); }
+
+  .section { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+  .settings { display: flex; flex-wrap: wrap; gap: 10px 18px; justify-content: center; align-items: center; font-size: 0.9rem; color: var(--muted); font-weight: 600; }
+  .settings label { display: flex; align-items: center; gap: 8px; }
+  .settings input[type=number] { width: 72px; padding: 5px 8px; font-size: 1rem; font-weight: 600; text-align: center; }
+  .settings input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
+
+  #people { list-style: none; margin: 16px 0 10px; padding: 0; display: grid; gap: 8px; text-align: left; }
+  .person {
+    display: grid; grid-template-columns: auto 1fr 84px auto auto auto; gap: 6px; align-items: center;
+    padding: 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px;
+  }
+  .person.current { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+  .person input { min-width: 0; padding: 6px 8px; font-size: 1rem; font-weight: 600; }
+  .person .weight { text-align: right; }
+  .person .pick {
+    width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line);
+    background: var(--surface); color: var(--muted); font-weight: 700; font-size: 0.85rem; padding: 0;
+  }
+  .person.current .pick { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .icon { background: none; border: none; color: var(--muted); padding: 4px; border-radius: 6px; display: flex; }
+  .icon:hover:not(:disabled) { color: var(--text); background: var(--surface); }
+  .icon:disabled { opacity: .3; cursor: default; }
+  .icon .lucide { width: 18px; height: 18px; }
+  .person .chips { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 0; font-size: 0.85rem; }
+  .person .chips:empty { display: none; }
+  .list-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+
+  .actions { display: flex; gap: 8px; justify-content: center; margin-top: 16px; }
   .actions button { font-size: 1rem; font-weight: 700; padding: 10px 22px; border-radius: 10px; min-width: 110px; }
   .actions button.primary { background: var(--accent); color: #fff; border: 1px solid var(--accent); }
   .actions button.neutral { background: var(--bg); color: var(--text); border: 1px solid var(--line); }
   .actions button.neutral:hover:not(:disabled) { border-color: var(--muted); }
   .actions button:disabled { opacity: .45; cursor: default; }
-  #display { font-size: 56px; font-weight: 600; font-variant-numeric: tabular-nums; margin: 18px 0 6px; }
-  #status { font-size: 0.85rem; color: var(--muted); min-height: 1em; }
+  #display { font-size: 56px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; margin: 6px 0; }
+  #status { font-size: 0.85rem; color: var(--muted); min-height: 1em; margin-top: 10px; }
+  .now svg.plates { height: 120px; }
   video, canvas { display: none; }
+</style>
+<!-- Shared by the main page and the PiP window (copied into it when it opens) -->
+<style id="now-css">
+  .now .who { display: flex; align-items: center; justify-content: center; gap: .5em; }
+  .now .who b { font-size: 1.5em; line-height: 1.2; }
+  .now .who .wt { font-size: 1.5em; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .now .nav { font: 700 1em var(--font); width: 1.9em; height: 1.9em; padding: 0; border-radius: 8px; cursor: pointer;
+              background: var(--bg); color: var(--text); border: 1px solid var(--line); }
+  .now .nav:hover { border-color: var(--muted); }
+  .now .meta { color: var(--muted); font-weight: 600; }
+  .now .err { color: var(--accent); }
+  .now svg.plates { display: block; width: 100%; margin: .3em auto; }
+  .now .changes, .now .next { display: flex; flex-wrap: wrap; gap: .3em .4em; justify-content: center; align-items: center; color: var(--muted); font-weight: 600; }
+  .now .next { margin-top: .3em; }
+  .now .changes .lbl { color: var(--text); }
+  .chip { display: inline-block; padding: .05em .5em; border-radius: 6px; font-weight: 700; font-variant-numeric: tabular-nums;
+          border: 1px solid rgba(0,0,0,.2); line-height: 1.5; }
+  .muted { color: var(--muted); }
+  .err-chip { color: var(--accent); font-weight: 700; }
 </style>
 </head>
 <body>
@@ -58,30 +103,41 @@
     <h1>Timer</h1>
 
     <div class="time-inputs">
-      <input id="min" type="number" min="0" value="3"> :
-      <input id="sec" type="number" min="0" max="59" value="00">
+      <input id="min" type="number" min="0" value="3" aria-label="Minutes"> :
+      <input id="sec" type="number" min="0" max="59" value="00" aria-label="Seconds">
     </div>
-
     <div class="presets">
       <button data-m="1">1m</button>
+      <button data-m="2">2m</button>
       <button data-m="3">3m</button>
       <button data-m="5">5m</button>
       <button data-m="10">10m</button>
-      <button data-m="25">25m</button>
     </div>
 
-    <label class="file">
-      Video to play when time's up (optional):<br>
-      <input id="file" type="file" accept="video/*">
-    </label>
-
-    <div class="actions">
-      <button id="left" class="neutral" disabled>Cancel</button>
-      <button id="right" class="primary">Start</button>
+    <div class="section">
+      <div class="settings">
+        <label>Reps <input id="reps" type="number" min="0" inputmode="numeric" placeholder="—"></label>
+        <label>Bar <input id="bar" type="number" min="0" step="any" inputmode="decimal" value="45"></label>
+        <label title="Only one set of plates (e.g. a landmine or loading pin), not one on each side of a barbell">
+          <input id="single" type="checkbox"> One stack of plates</label>
+      </div>
+      <ol id="people"></ol>
+      <div class="list-actions">
+        <button class="ghost" id="add">+ Add person</button>
+        <button class="ghost" id="copy">Copy link</button>
+      </div>
     </div>
 
-    <div id="display">3:00</div>
-    <div id="status"></div>
+    <div class="section now">
+      <div id="who"></div>
+      <div id="display">3:00</div>
+      <div id="plates"></div>
+      <div class="actions">
+        <button id="left" class="neutral" disabled>Cancel</button>
+        <button id="right" class="primary">Start</button>
+      </div>
+      <div id="status"></div>
+    </div>
   </div>
 </main>
 
@@ -93,30 +149,318 @@ const $ = id => document.getElementById(id);
 const canvas = $('canvas'), ctx = canvas.getContext('2d');
 const pip = $('pip');
 const useDocPip = 'documentPictureInPicture' in window;
-let totalMs = 0, endTime = 0, ticker = null, videoURL = null, finished = false, flash = false;
-let pipWin = null, ui = null, pausedLeft = null;   // Document PiP window + its elements (Chrome/Edge)
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const num = x => +(+x).toFixed(2);   // tidy floats for display (e.g. 2.5, not 2.4999)
 
-document.querySelectorAll('.presets button').forEach(b =>
-  b.onclick = () => { $('min').value = b.dataset.m; $('sec').value = '00'; updateDisplay(b.dataset.m * 60000); });
+// ================= Plates =================
+// Weights are worked in units of 2.5 lb so the maths stays in whole numbers.
+// Colours follow the usual bumper-plate scheme (blue 45, green 25, yellow 10, red 5).
+const PLATES = [
+  { u: 18, lb: 45,  color: '#2563eb', ink: '#fff',    h: 100, w: 20 },
+  { u: 10, lb: 25,  color: '#16a34a', ink: '#fff',    h: 82,  w: 16 },
+  { u: 4,  lb: 10,  color: '#facc15', ink: '#1c1d21', h: 62,  w: 14 },
+  { u: 2,  lb: 5,   color: '#ef4444', ink: '#fff',    h: 48,  w: 13 },
+  { u: 1,  lb: 2.5, color: '#e5e7eb', ink: '#1c1d21', h: 38,  w: 12 },
+];
+const PLATE = Object.fromEntries(PLATES.map(p => [p.u, p]));
 
-$('file').onchange = e => {
-  if (videoURL) URL.revokeObjectURL(videoURL);
-  const f = e.target.files[0];
-  videoURL = f ? URL.createObjectURL(f) : null;
+// Fewest plates that add up to n units, heaviest first.
+const fewest = (() => {
+  const memo = [[]];
+  return n => {
+    for (let a = memo.length; a <= n; a++) {
+      let best = null;
+      for (const { u } of PLATES) if (u <= a && (!best || memo[a - u].length + 1 < best.length)) best = [u, ...memo[a - u]];
+      memo[a] = best.sort((x, y) => y - x);
+    }
+    return memo[n];
+  };
+})();
+
+// A stack lists plates from the inside (next to the collar) out. To get from stack a to
+// stack b you pull plates off the outside until what's left matches the start of b, then add the rest.
+const shared = (a, b) => { let i = 0; while (i < a.length && i < b.length && a[i] === b[i]) i++; return i; };
+const moves = (a, b) => a.length + b.length - 2 * shared(a, b);
+const changes = (a, b) => { const k = shared(a, b); return { off: a.slice(k).reverse(), on: b.slice(k) }; };
+
+// Best stack for `t` units given the stacks loaded just before and after it.
+// Any good answer starts with part of a neighbour's stack, then finishes with the fewest plates.
+function bestStack(t, nbrs, cur) {
+  const cost = s => nbrs.reduce((c, n) => c + moves(n, s), 0);
+  let best = cur, bestCost = cost(cur);
+  for (const n of nbrs) {
+    let acc = 0;
+    for (let k = 0; k <= n.length; k++) {
+      if (k) acc += n[k - 1];
+      if (acc > t) break;
+      const s = n.slice(0, k).concat(fewest(t - acc)), c = cost(s);
+      if (c < bestCost) { best = s; bestCost = c; }
+    }
+  }
+  return best;
+}
+
+// Choose a stack for every person so the whole rotation (last person back to first
+// included) takes the fewest plates on and off. Starts from a few different layouts,
+// then improves one person at a time until nothing gets better.
+function planStacks(targets) {
+  const idx = targets.map((t, i) => t == null ? -1 : i).filter(i => i >= 0), m = idx.length;
+  const greedy = targets.map(t => t == null ? [] : fewest(t));
+  if (m < 2) return greedy;
+  const total = st => idx.reduce((c, i, k) => c + moves(st[i], st[idx[(k + 1) % m]]), 0);
+  const improve = st => {
+    for (let pass = 0, changed = true; changed && pass < 50; pass++) {
+      changed = false;
+      idx.forEach((i, k) => {
+        const s = bestStack(targets[i], [st[idx[(k + m - 1) % m]], st[idx[(k + 1) % m]]], st[i]);
+        if (s !== st[i]) { st[i] = s; changed = true; }
+      });
+    }
+    return st;
+  };
+  let best = improve(greedy.slice()), bestCost = total(best);
+  for (const j of idx) {   // also try building everyone on top of person j's plates
+    const base = greedy[j];
+    const st = improve(targets.map((t, i) => t == null ? [] : bestStack(t, [base], greedy[i])));
+    const c = total(st);
+    if (c < bestCost) { best = st; bestCost = c; }
+  }
+  return best;
+}
+
+function chips(stack) {
+  return stack.map(u => { const p = PLATE[u]; return `<span class="chip" style="background:${p.color};color:${p.ink}">${p.lb}</span>`; }).join(' ');
+}
+
+function diagram(stack) {
+  const H = 110, mid = H / 2;
+  let x = 34;
+  const plates = stack.map(u => {
+    const p = PLATE[u], y = mid - p.h / 2, cx = x + p.w / 2;
+    const svg = `<rect x="${x}" y="${y}" width="${p.w}" height="${p.h}" rx="3" fill="${p.color}" stroke="rgba(0,0,0,.3)"/>` +
+      `<text x="${cx}" y="${mid}" transform="rotate(-90 ${cx} ${mid})" text-anchor="middle" dominant-baseline="central" ` +
+      `font-size="11" font-weight="700" fill="${p.ink}">${p.lb}</text>`;
+    x += p.w + 2;
+    return svg;
+  }).join('');
+  const W = Math.max(x + 40, 150);
+  return `<svg class="plates" viewBox="0 0 ${W} ${H}" role="img" aria-label="${stack.length ? 'Plates: ' + stack.map(u => PLATE[u].lb).join(', ') : 'No plates'}" font-family="var(--font)">
+    <rect x="0" y="${mid - 5}" width="24" height="10" style="fill:var(--muted)" opacity=".6"/>
+    <rect x="24" y="${mid - 7}" width="${W - 24}" height="14" rx="2" style="fill:var(--muted)"/>
+    <rect x="24" y="${mid - 18}" width="8" height="36" rx="2" style="fill:var(--muted)"/>
+    ${plates}</svg>`;
+}
+
+// ================= Settings (kept in the URL so it can be shared) =================
+// ?people=Ann:105,Bob:135&reps=4&bar=45&single=0&time=3
+const cfg = { people: [], reps: '', bar: 45, single: false };
+
+function readURL() {
+  const dec = s => { try { return decodeURIComponent(s.replace(/\+/g, ' ')); } catch { return s; } };
+  const q = {};
+  location.search.slice(1).split('&').forEach(kv => {
+    if (!kv) return;
+    const i = kv.indexOf('=');
+    q[dec(i < 0 ? kv : kv.slice(0, i)).toLowerCase()] = i < 0 ? '' : kv.slice(i + 1);
+  });
+  // People are split on raw commas before decoding, so a name can contain an encoded comma.
+  const names = (q.people || '').split(',').map(dec).map(s => s.trim()).filter(Boolean);
+  const weights = q.weights != null ? dec(q.weights).split(',').map(s => s.trim()) : null;
+  cfg.people = names.map((s, i) => {
+    if (weights) return { name: s, weight: weights[i] ?? '' };
+    const c = s.lastIndexOf(':');
+    return c < 0 ? { name: s, weight: '' } : { name: s.slice(0, c).trim(), weight: s.slice(c + 1).trim() };
+  });
+  if (q.reps != null) cfg.reps = dec(q.reps);
+  const bar = q.bar ?? q.barweight;
+  if (bar != null && isFinite(parseFloat(dec(bar)))) cfg.bar = parseFloat(dec(bar));
+  if (q.single != null) cfg.single = /^(1|true|yes|on)$/i.test(dec(q.single));
+  if (q.time) {
+    const [m, s] = dec(q.time).split(':');
+    const total = Math.round((parseFloat(m) || 0) * 60 + (parseFloat(s) || 0));
+    if (total > 0) { $('min').value = Math.floor(total / 60); $('sec').value = String(total % 60).padStart(2, '0'); }
+  }
+  $('reps').value = cfg.reps; $('bar').value = cfg.bar; $('single').checked = cfg.single;
+}
+
+function writeURL() {
+  const enc = s => encodeURIComponent(s).replace(/%20/g, '+');
+  const secs = Math.round(inputMs() / 1000);
+  const q = [];
+  if (cfg.people.length) q.push('people=' + cfg.people.map(p => enc(p.name) + ':' + enc(p.weight)).join(','));
+  if (cfg.reps !== '') q.push('reps=' + enc(cfg.reps));
+  q.push('bar=' + num(cfg.bar), 'single=' + (cfg.single ? 1 : 0));
+  q.push('time=' + (secs % 60 ? `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}` : secs / 60));
+  history.replaceState(null, '', location.pathname + '?' + q.join('&'));
+}
+
+// What each person's weight means in plates (rounded down to what the plates can make).
+function target(p) {
+  const w = parseFloat(p.weight);
+  if (!isFinite(w)) return null;
+  const sides = cfg.single ? 1 : 2;
+  const units = Math.max(0, Math.floor((w - cfg.bar) / sides / 2.5 + 1e-9));
+  const total = cfg.bar + units * 2.5 * sides;
+  return { units, total, err: num(w - total) };
+}
+
+let targets = [], stacks = [], cur = 0;
+let loaded = null;   // plates physically on the bar (null = unknown / nothing yet)
+
+function replan() {
+  targets = cfg.people.map(target);
+  stacks = planStacks(targets.map(t => t && t.units));
+  cur = Math.min(cur, Math.max(0, cfg.people.length - 1));
+}
+
+// ================= People list (main page) =================
+const ICON = {
+  up: '<path d="m18 15-6-6-6 6"/>', down: '<path d="m6 9 6 6 6-6"/>', del: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
 };
+const icon = (act, label, disabled) =>
+  `<button class="icon" data-act="${act}" aria-label="${label}" title="${label}"${disabled ? ' disabled' : ''}><svg class="lucide" viewBox="0 0 24 24" aria-hidden="true">${ICON[act]}</svg></button>`;
+
+function renderList() {
+  const n = cfg.people.length;
+  $('people').innerHTML = cfg.people.map((p, i) => `<li class="person" data-i="${i}">
+      <button class="pick" data-act="pick" title="Make this person next up" aria-label="Make ${esc(p.name || 'this person')} next up">${i + 1}</button>
+      <input class="name" value="${esc(p.name)}" placeholder="Name" aria-label="Name">
+      <input class="weight" type="number" min="0" step="any" inputmode="decimal" value="${esc(p.weight)}" placeholder="lb" aria-label="Weight">
+      ${icon('up', 'Move up', i === 0)}${icon('down', 'Move down', i === n - 1)}${icon('del', 'Remove')}
+      <div class="chips"></div></li>`).join('');
+  refresh();
+}
+
+function refreshList() {
+  document.querySelectorAll('#people .person').forEach(li => {
+    const i = +li.dataset.i, t = targets[i];
+    li.classList.toggle('current', i === cur);
+    li.querySelector('.chips').innerHTML = !t ? '' :
+      (stacks[i].length ? chips(stacks[i]) : '<span class="muted">empty bar</span>') +
+      (t.err ? ` <span class="err-chip">${t.err > 0 ? '−' + t.err : 'bar is ' + num(cfg.bar)} → ${num(t.total)}</span>` : '');
+  });
+}
+
+$('people').addEventListener('input', e => {
+  const li = e.target.closest('.person'); if (!li) return;
+  const p = cfg.people[+li.dataset.i];
+  if (e.target.classList.contains('name')) p.name = e.target.value;
+  else p.weight = e.target.value;
+  refresh();
+});
+
+$('people').addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const i = +b.closest('.person').dataset.i, list = cfg.people;
+  const act = b.dataset.act;
+  if (act === 'pick') { if (state === 'idle') cur = i; refresh(); return; }
+  const curPerson = list[cur];
+  if (act === 'del') list.splice(i, 1);
+  else { const j = act === 'up' ? i - 1 : i + 1; [list[i], list[j]] = [list[j], list[i]]; }
+  cur = Math.max(0, list.indexOf(curPerson) >= 0 ? list.indexOf(curPerson) : Math.min(i, list.length - 1));
+  renderList();
+});
+
+$('add').onclick = () => {
+  cfg.people.push({ name: '', weight: '' });
+  renderList();
+  const rows = document.querySelectorAll('#people .name');
+  rows[rows.length - 1].focus();
+};
+
+$('copy').onclick = async () => {
+  writeURL();
+  try { await navigator.clipboard.writeText(location.href); $('status').textContent = 'Link copied.'; }
+  catch { $('status').textContent = 'Couldn\'t copy. The link is in the address bar.'; }
+};
+
+$('reps').oninput = e => { cfg.reps = e.target.value; refresh(); };
+$('bar').oninput = e => { const v = parseFloat(e.target.value); cfg.bar = isFinite(v) ? v : 0; refresh(); };
+$('single').onchange = e => { cfg.single = e.target.checked; refresh(); };
+['min', 'sec'].forEach(id => $(id).oninput = () => { writeURL(); if (state === 'idle') showTime(inputMs()); });
+document.querySelectorAll('.presets button').forEach(b =>
+  b.onclick = () => { $('min').value = b.dataset.m; $('sec').value = '00'; writeURL(); if (state === 'idle') showTime(inputMs()); });
+
+// ================= "Now" panel (main page and PiP window) =================
+function whoHTML() {
+  const n = cfg.people.length;
+  if (!n) return cfg.reps !== '' ? `<div class="meta">${esc(cfg.reps)} reps</div>` : '';
+  const p = cfg.people[cur], t = targets[cur];
+  const nav = state === 'idle' && n > 1;
+  const meta = [cfg.reps !== '' ? `${esc(cfg.reps)} reps` : '', `${cur + 1} of ${n}`];
+  if (t && t.err > 0) meta.push(`<span class="err">wanted ${num(parseFloat(p.weight))}, ${t.err} short</span>`);
+  if (t && t.err < 0) meta.push(`<span class="err">bar alone is ${num(cfg.bar)}</span>`);
+  return `<div class="who">${nav ? '<button class="nav" data-act="prev" aria-label="Previous person">‹</button>' : ''}
+      <b>${esc(p.name || 'Person ' + (cur + 1))}</b>${t ? `<span class="wt">${num(t.total)}</span>` : ''}
+      ${nav ? '<button class="nav" data-act="next" aria-label="Next person">›</button>' : ''}</div>
+    <div class="meta">${meta.filter(Boolean).join(' · ')}</div>`;
+}
+
+function changesHTML(from, to, label) {
+  const each = cfg.single ? '' : ' <span class="muted">(each side)</span>';
+  if (from == null) return to.length ? `<div class="changes"><span class="lbl">${label}Load</span> ${chips(to)}${each}</div>` : '';
+  const { off, on } = changes(from, to);
+  if (!off.length && !on.length) return `<div class="changes"><span class="lbl">${label}No plate changes</span></div>`;
+  return `<div class="changes"><span class="lbl">${label}</span>${off.length ? `Off ${chips(off)}` : ''}${off.length && on.length ? ' · ' : ''}${on.length ? `On ${chips(on)}` : ''}${each}</div>`;
+}
+
+function platesHTML() {
+  const n = cfg.people.length;
+  if (!n || !targets[cur]) return '';
+  const nxt = (cur + 1) % n;
+  let html = diagram(stacks[cur]);
+  if (state === 'idle') html += changesHTML(loaded, stacks[cur], '');
+  if (n > 1) {
+    const np = cfg.people[nxt], nt = targets[nxt];
+    html += `<div class="next">Next: <b style="color:var(--text)">${esc(np.name || 'Person ' + (nxt + 1))}</b>${nt ? ' ' + num(nt.total) : ''}</div>`;
+    if (state !== 'idle' && nt) html += changesHTML(stacks[cur], stacks[nxt], '');
+  }
+  return html;
+}
+
+function renderNow() {
+  const who = whoHTML(), plates = platesHTML();
+  $('who').innerHTML = who; $('plates').innerHTML = plates;
+  if (ui) { ui.who.innerHTML = who; ui.plates.innerHTML = plates; }
+  if (!ui && document.pictureInPictureElement && state === 'idle') drawCanvas(fmt(inputMs()));
+}
+
+function refresh() {
+  replan(); refreshList(); renderNow(); writeURL();
+}
+
+function onNowClick(e) {
+  const b = e.target.closest('[data-act]'); if (!b || state !== 'idle') return;
+  const n = cfg.people.length;
+  cur = (cur + (b.dataset.act === 'next' ? 1 : n - 1)) % n;
+  refreshList(); renderNow();
+}
+document.querySelector('.card .now').addEventListener('click', onNowClick);
+
+// ================= Timer =================
+let totalMs = 0, endTime = 0, ticker = null, finished = false, flash = false, pausedLeft = null;
+let pipWin = null, ui = null;
 
 const fmt = ms => {
   const s = Math.max(0, Math.ceil(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
-const updateDisplay = ms => $('display').textContent = fmt(ms);
 const inputMs = () => ((+$('min').value || 0) * 60 + (+$('sec').value || 0)) * 1000;
+function showTime(ms) {
+  $('display').textContent = fmt(ms);
+  if (ui) ui.t.textContent = fmt(ms);
+}
 
-function draw(text, bg = '#000', fg = '#fff', size = 120) {
+function drawCanvas(text, bg = '#000', fg = '#fff', size = 110) {
   ctx.fillStyle = bg; ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = fg; ctx.font = `bold ${size}px -apple-system, sans-serif`;
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+  ctx.fillStyle = fg; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const p = cfg.people[cur], t = targets[cur];
+  if (p) {
+    ctx.font = 'bold 34px -apple-system, sans-serif';
+    ctx.fillText([p.name, t && num(t.total)].filter(Boolean).join('  ·  '), canvas.width / 2, 44);
+  }
+  ctx.font = `bold ${size}px -apple-system, sans-serif`;
+  ctx.fillText(text, canvas.width / 2, p ? 160 : canvas.height / 2);
 }
 
 function beep() {
@@ -131,64 +475,56 @@ function beep() {
 }
 
 // ---- Controls: the same two buttons on the main page and in the PiP window ----
-// Left button: Cancel (dimmed when idle) or Stop (time's up).
-// Right button: Start → Pause → Resume, or Repeat (time's up).
+// Left: Cancel (dimmed when idle), or Stop when time's up.
+// Right: Start → Pause → Resume, then Next (or Repeat with no people) when time's up.
 let state = 'idle';   // idle | running | paused | done
 
 function setState(s) {
   state = s;
   const left = s === 'done' ? 'Stop' : 'Cancel';
-  const right = { idle: 'Start', running: 'Pause', paused: 'Resume', done: 'Repeat' }[s];
+  const right = { idle: 'Start', running: 'Pause', paused: 'Resume', done: cfg.people.length ? 'Next' : 'Repeat' }[s];
   const pairs = [[$('left'), $('right')]];
   if (ui) pairs.push([ui.l, ui.r]);
-  pairs.forEach(([l, r]) => {
-    l.textContent = left; r.textContent = right;
-    l.disabled = s === 'idle';
-  });
+  pairs.forEach(([l, r]) => { l.textContent = left; r.textContent = right; l.disabled = s === 'idle'; });
+  renderNow();
 }
 
 const onLeft = () => { if (state !== 'idle') cancel(); };
-const onRight = () => ({ idle: startFromIdle, running: pause, paused: resume, done: restart })[state]();
-
-// From idle, use whatever time is in the inputs (it may have been edited since the last run).
-function startFromIdle() {
-  if (!pipWin && !document.pictureInPictureElement) return start();
-  totalMs = inputMs();
-  if (totalMs <= 0) return;
-  restart();
-}
+const onRight = () => ({ idle: start, running: pause, paused: resume, done: next })[state]();
 
 // ---- Chrome/Edge: Document PiP window, styled with the site's stylesheet and theme ----
 async function openDocPip() {
-  pipWin = await documentPictureInPicture.requestWindow({ width: 340, height: 240 });
+  pipWin = await documentPictureInPicture.requestWindow({ width: 420, height: 560 });
   const d = pipWin.document;
   d.documentElement.dataset.theme = document.documentElement.dataset.theme;
-  d.head.innerHTML = `<link rel="stylesheet" href="${new URL('/site.css', location.href)}"><style>
-    body { margin:0; height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center;
-           background:var(--bg); color:var(--text); font-family:var(--font); transition:background .15s; }
+  d.head.innerHTML = `<link rel="stylesheet" href="${new URL('/site.css', location.href)}">
+  <style>${$('now-css').textContent}</style><style>
+    body { margin:0; height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1vh;
+           background:var(--bg); color:var(--text); font-family:var(--font); font-size:clamp(13px, 4.2vmin, 30px);
+           text-align:center; transition:background .15s; padding:2vh 4vw; box-sizing:border-box; overflow:hidden; }
     body.flash { background:var(--accent); color:#fff; }
-    #t { font-size:min(30vw, 50vh); line-height:1; font-weight:600; font-variant-numeric:tabular-nums; }
-    #t.done { font-size:min(15vw, 28vh); font-weight:700; }
-    video { display:none; width:100%; flex:1; min-height:0; background:#000; }
-    .row { display:flex; gap:min(3vw, 4vh); width:100%; box-sizing:border-box; padding:min(3vw, 4vh) min(5vw, 6vh); }
-    button { flex:1; height:clamp(36px, 20vh, 120px); border-radius:clamp(8px, 3vh, 18px);
-             font:700 clamp(14px, min(6vw, 8vh), 40px) var(--font); cursor:pointer; }
+    body.flash .muted, body.flash .meta, body.flash .changes, body.flash .next, body.flash .wt { color:#fff; }
+    #t { font-size:min(22vw, 20vh); line-height:1; font-weight:600; font-variant-numeric:tabular-nums; }
+    #t.done { font-size:min(13vw, 12vh); font-weight:700; }
+    .now { width:100%; }
+    .now svg.plates { height:24vh; }
+    .row { display:flex; gap:min(3vw, 3vh); width:100%; margin-top:auto; }
+    .row button { flex:1; height:clamp(36px, 13vh, 110px); border-radius:clamp(8px, 2.5vh, 18px);
+             font:700 clamp(14px, min(6vw, 6vh), 40px) var(--font); cursor:pointer; }
     .primary { background:var(--accent); color:#fff; border:1px solid var(--accent); }
     .neutral { background:var(--surface); color:var(--text); border:1px solid var(--line); }
     .neutral:hover:not(:disabled) { border-color:var(--muted); }
-    button:disabled { opacity:.45; cursor:default; }
+    .row button:disabled { opacity:.45; cursor:default; }
   </style>`;
-  d.body.innerHTML = `<div id="t"></div><video playsinline></video>
+  d.body.innerHTML = `<div class="now" style="margin-top:auto"><div id="who"></div></div><div id="t"></div>
+    <div class="now"><div id="plates"></div></div>
     <div class="row"><button id="l" class="neutral"></button><button id="r" class="primary"></button></div>`;
-  ui = { body: d.body, t: d.getElementById('t'), v: d.querySelector('video'),
+  ui = { body: d.body, t: d.getElementById('t'), who: d.getElementById('who'), plates: d.getElementById('plates'),
          l: d.getElementById('l'), r: d.getElementById('r') };
   ui.l.onclick = onLeft;
   ui.r.onclick = onRight;
-  pipWin.addEventListener('pagehide', () => {
-    pipWin = ui = null;
-    stop(); finished = false; pausedLeft = null;
-    updateDisplay(inputMs()); setState('idle');
-  });
+  d.body.addEventListener('click', onNowClick);
+  pipWin.addEventListener('pagehide', () => { pipWin = ui = null; cancel(); });
 }
 
 // Keep the PiP window's light/dark theme in sync with the page's toggle
@@ -196,60 +532,34 @@ new MutationObserver(() => {
   if (pipWin) pipWin.document.documentElement.dataset.theme = document.documentElement.dataset.theme;
 }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
-function resetPipView() {
-  if (!ui) return;
-  ui.v.pause(); ui.v.removeAttribute('src'); ui.v.load();
-  ui.v.style.display = 'none'; ui.t.style.display = '';
-  ui.t.classList.remove('done'); ui.body.classList.remove('flash');
-}
-
-// Safari: put the video PiP back on the live canvas (after an alert video played)
-function resetVideoPip() {
-  pip.pause(); pip.removeAttribute('src');
-  pip.srcObject = canvas.captureStream(10);
-  pip.muted = true; pip.play().catch(() => {});
-}
-
-// ---- Safari fallback: video PiP, restart via the skip button ----
+// ---- Safari fallback: video PiP showing a drawn canvas (no buttons inside it) ----
 async function openVideoPip() {
-  pip.removeAttribute('src');
+  drawCanvas(fmt(inputMs()));
   pip.srcObject = canvas.captureStream(10);
   pip.muted = true;
   await pip.play();
   await pip.requestPictureInPicture();
-  try { navigator.mediaSession.setActionHandler('nexttrack', restart); } catch {}
+  try { navigator.mediaSession.setActionHandler('nexttrack', () => { if (state === 'done' || state === 'idle') onRight(); }); } catch {}
 }
-pip.addEventListener('leavepictureinpicture', () => {
-  if (useDocPip || (state !== 'running' && state !== 'paused')) return;
-  stop(); finished = false; pausedLeft = null;
-  updateDisplay(inputMs()); setState('idle');
-});
+pip.addEventListener('leavepictureinpicture', () => { if (!useDocPip && state !== 'idle') cancel(); });
 
 async function start() {
-  if (!useDocPip && !document.pictureInPictureEnabled) {
-    $('status').textContent = 'Picture-in-Picture isn\'t supported in this browser (try Chrome, Edge, or Safari).';
-    return;
-  }
   totalMs = inputMs();
   if (totalMs <= 0) return;
-  stop();
   try {
-    // Browsers only allow PiP from a click, so it opens now and shows the countdown.
+    // Browsers only allow PiP from a click, so it opens now.
     if (useDocPip) { if (!pipWin) await openDocPip(); }
-    else await openVideoPip();
+    else if (document.pictureInPictureEnabled) { if (!document.pictureInPictureElement) await openVideoPip(); }
+    else $('status').textContent = 'Picture-in-Picture isn\'t supported here, so the timer runs on this page.';
   } catch (err) {
     $('status').textContent = 'Couldn\'t open PiP: ' + err.message;
   }
-  beginCountdown();
-}
-
-function beginCountdown() {
-  clearInterval(ticker);
+  clearAlarm();
   finished = false; pausedLeft = null;
+  if (cfg.people.length && targets[cur]) loaded = stacks[cur];
   endTime = Date.now() + totalMs;
   setState('running');
-  document.title = 'PiP Timer';
-  $('status').textContent = 'Running — the PiP window will play when time is up.';
+  if ($('status').textContent.startsWith('Link')) $('status').textContent = '';
   ticker = setInterval(tick, 200);
   tick();
 }
@@ -258,85 +568,65 @@ function pause() {
   pausedLeft = endTime - Date.now();
   clearInterval(ticker); ticker = null;
   setState('paused');
-  $('status').textContent = 'Paused';
 }
 
 function resume() {
   endTime = Date.now() + pausedLeft;
   pausedLeft = null;
   setState('running');
-  $('status').textContent = 'Running — the PiP window will play when time is up.';
   ticker = setInterval(tick, 200);
   tick();
 }
 
-// Cancel / Stop: end the timer (and any alert), keep the window open showing
-// the original time so Start can run it again — same as Apple's Clock.
+function clearAlarm() {
+  if (ui) { ui.t.classList.remove('done'); ui.body.classList.remove('flash'); }
+  document.title = 'PiP Timer';
+}
+
+// Cancel / Stop: end this person's timer and go back to the full time, same person.
 function cancel() {
   clearInterval(ticker); ticker = null;
   finished = false; pausedLeft = null;
-  if (ui) { resetPipView(); ui.t.textContent = fmt(totalMs); }
-  else if (document.pictureInPictureElement) { resetVideoPip(); draw(fmt(totalMs)); }
-  updateDisplay(totalMs);
+  clearAlarm();
   setState('idle');
-  document.title = 'PiP Timer';
-  $('status').textContent = '';
+  showTime(inputMs());
 }
 
-// Start (after cancel) / Repeat: run again with the same duration in the open window.
-function restart() {
-  if (!pipWin && !document.pictureInPictureElement) return start();
-  if (ui) resetPipView(); else resetVideoPip();
-  beginCountdown();
+// Next: on to the next person, waiting for Start so there's time to change plates.
+function next() {
+  if (cfg.people.length) cur = (cur + 1) % cfg.people.length;
+  cancel();
+  refreshList();
+  if (!cfg.people.length) start();   // no people: works like the old Repeat
 }
 
 function tick() {
   const left = endTime - Date.now();
-  updateDisplay(left);
   if (left > 0) {
-    if (ui) ui.t.textContent = fmt(left); else draw(fmt(left));
+    showTime(left);
+    if (!ui && document.pictureInPictureElement) drawCanvas(fmt(left));
     return;
   }
   if (!finished) { finished = true; timesUp(); }
-  if (!videoURL) {
-    flash = !flash;
-    if (ui) { ui.t.textContent = "TIME'S UP"; ui.t.classList.add('done'); ui.body.classList.toggle('flash', flash); }
-    else draw("TIME'S UP", flash ? '#ff3b30' : '#000', '#fff', 64);
-  }
+  flash = !flash;
+  $('display').textContent = "Time's up";
+  if (ui) { ui.t.textContent = "TIME'S UP"; ui.t.classList.add('done'); ui.body.classList.toggle('flash', flash); }
+  else if (document.pictureInPictureElement) drawCanvas("TIME'S UP", flash ? '#c62d28' : '#000', '#fff', 64);
 }
 
-async function playVideo(v) {
-  v.srcObject = null; v.src = videoURL; v.muted = false; v.loop = false;
-  try { await v.play(); }
-  catch { v.muted = true; await v.play(); }  // autoplay with sound blocked
-}
-
-async function timesUp() {
+function timesUp() {
   document.title = "⏰ Time's up!";
-  $('status').textContent = "Time's up!";
   setState('done');
-  if (!videoURL) return beep();
-  clearInterval(ticker); ticker = null;
-  if (ui) {
-    ui.t.style.display = 'none'; ui.v.style.display = 'block';
-    await playVideo(ui.v);
-  } else {
-    await playVideo(pip);
-    if (!document.pictureInPictureElement) pip.requestPictureInPicture().catch(() => {});
-  }
-}
-
-function stop() {
-  clearInterval(ticker); ticker = null;
-  pip.pause();
-  ui?.v.pause();
-  if (document.pictureInPictureElement) document.exitPictureInPicture().catch(() => {});
-  document.title = 'PiP Timer';
-  $('status').textContent = '';
+  beep();
 }
 
 $('left').onclick = onLeft;
 $('right').onclick = onRight;
+
+readURL();
+renderList();
+setState('idle');
+showTime(inputMs());
 </script>
 </body>
 </html>
