@@ -34,9 +34,11 @@
   label.file { display: block; margin: 16px 0; font-size: 0.85rem; color: var(--muted); }
   label.file input { margin-top: 6px; max-width: 100%; color: var(--muted); font-family: var(--font); }
   .actions { display: flex; gap: 8px; justify-content: center; }
-  .actions button { font-size: 1rem; font-weight: 700; padding: 10px 22px; border-radius: 10px; }
-  #start { background: var(--accent); color: #fff; border: 1px solid var(--accent); }
-  #stop { background: var(--bg); color: var(--text); border: 1px solid var(--line); }
+  .actions button { font-size: 1rem; font-weight: 700; padding: 10px 22px; border-radius: 10px; min-width: 110px; }
+  .actions button.primary { background: var(--accent); color: #fff; border: 1px solid var(--accent); }
+  .actions button.neutral { background: var(--bg); color: var(--text); border: 1px solid var(--line); }
+  .actions button.neutral:hover:not(:disabled) { border-color: var(--muted); }
+  .actions button:disabled { opacity: .45; cursor: default; }
   #display { font-size: 56px; font-weight: 600; font-variant-numeric: tabular-nums; margin: 18px 0 6px; }
   #status { font-size: 0.85rem; color: var(--muted); min-height: 1em; }
   video, canvas { display: none; }
@@ -74,8 +76,8 @@
     </label>
 
     <div class="actions">
-      <button id="start">Start</button>
-      <button id="stop">Stop</button>
+      <button id="left" class="neutral" disabled>Cancel</button>
+      <button id="right" class="primary">Start</button>
     </div>
 
     <div id="display">3:00</div>
@@ -128,56 +130,84 @@ function beep() {
   });
 }
 
-// ---- Chrome/Edge: Document PiP window with Apple Clock-style buttons ----
-// Left button: Cancel (running/paused) or Stop (time's up).
+// ---- Controls: the same two buttons on the main page and in the PiP window ----
+// Left button: Cancel (dimmed when idle) or Stop (time's up).
 // Right button: Start → Pause → Resume, or Repeat (time's up).
-const BTN = {
-  cancel: ['Cancel', 'grey'],   stop:   ['Stop', 'grey'],
-  start:  ['Start', 'green'],   pause:  ['Pause', 'orange'],
-  resume: ['Resume', 'green'],  repeat: ['Repeat', 'green'],
-};
-let pipState = 'running';   // running | paused | idle | done
+let state = 'idle';   // idle | running | paused | done
 
+function setState(s) {
+  state = s;
+  const left = s === 'done' ? 'Stop' : 'Cancel';
+  const right = { idle: 'Start', running: 'Pause', paused: 'Resume', done: 'Repeat' }[s];
+  const pairs = [[$('left'), $('right')]];
+  if (ui) pairs.push([ui.l, ui.r]);
+  pairs.forEach(([l, r]) => {
+    l.textContent = left; r.textContent = right;
+    l.disabled = s === 'idle';
+  });
+}
+
+const onLeft = () => { if (state !== 'idle') cancel(); };
+const onRight = () => ({ idle: startFromIdle, running: pause, paused: resume, done: restart })[state]();
+
+// From idle, use whatever time is in the inputs (it may have been edited since the last run).
+function startFromIdle() {
+  if (!pipWin && !document.pictureInPictureElement) return start();
+  totalMs = inputMs();
+  if (totalMs <= 0) return;
+  restart();
+}
+
+// ---- Chrome/Edge: Document PiP window, styled with the site's stylesheet and theme ----
 async function openDocPip() {
   pipWin = await documentPictureInPicture.requestWindow({ width: 340, height: 240 });
   const d = pipWin.document;
-  d.head.innerHTML = `<style>
+  d.documentElement.dataset.theme = document.documentElement.dataset.theme;
+  d.head.innerHTML = `<link rel="stylesheet" href="${new URL('/site.css', location.href)}"><style>
     body { margin:0; height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center;
-           background:#000; color:#fff; font-family:-apple-system,sans-serif; transition:background .15s; }
-    #t { font-size:min(30vw, 50vh); line-height:1; font-weight:200; font-variant-numeric:tabular-nums; }
-    #t.done { font-size:min(15vw, 28vh); font-weight:bold; }
+           background:var(--bg); color:var(--text); font-family:var(--font); transition:background .15s; }
+    body.flash { background:var(--accent); color:#fff; }
+    #t { font-size:min(30vw, 50vh); line-height:1; font-weight:600; font-variant-numeric:tabular-nums; }
+    #t.done { font-size:min(15vw, 28vh); font-weight:700; }
     video { display:none; width:100%; flex:1; min-height:0; background:#000; }
-    .row { display:flex; justify-content:space-between; width:100%; box-sizing:border-box; padding:min(3vw, 4vh) min(5vw, 6vh); }
-    button { --s:clamp(56px, min(22vw, 32vh), 180px); width:var(--s); height:var(--s); border-radius:50%;
-             font-size:calc(var(--s) * 0.2); border:none; cursor:pointer; box-shadow:0 0 0 3px #000, 0 0 0 5px var(--bg); }
-    .grey   { --bg:#333336; background:var(--bg); color:#fff; }
-    .green  { --bg:#0a2a12; background:var(--bg); color:#30d158; }
-    .orange { --bg:#2f1d04; background:var(--bg); color:#ff9f0a; }
+    .row { display:flex; gap:min(3vw, 4vh); width:100%; box-sizing:border-box; padding:min(3vw, 4vh) min(5vw, 6vh); }
+    button { flex:1; height:clamp(36px, 20vh, 120px); border-radius:clamp(8px, 3vh, 18px);
+             font:700 clamp(14px, min(6vw, 8vh), 40px) var(--font); cursor:pointer; }
+    .primary { background:var(--accent); color:#fff; border:1px solid var(--accent); }
+    .neutral { background:var(--surface); color:var(--text); border:1px solid var(--line); }
+    .neutral:hover:not(:disabled) { border-color:var(--muted); }
     button:disabled { opacity:.45; cursor:default; }
   </style>`;
   d.body.innerHTML = `<div id="t"></div><video playsinline></video>
-    <div class="row"><button id="l"></button><button id="r"></button></div>`;
+    <div class="row"><button id="l" class="neutral"></button><button id="r" class="primary"></button></div>`;
   ui = { body: d.body, t: d.getElementById('t'), v: d.querySelector('video'),
          l: d.getElementById('l'), r: d.getElementById('r') };
-  ui.l.onclick = () => { if (pipState !== 'idle') cancel(); };
-  ui.r.onclick = () => ({ running: pause, paused: resume, idle: restart, done: restart })[pipState]();
-  pipWin.addEventListener('pagehide', () => { pipWin = ui = null; stop(); });
+  ui.l.onclick = onLeft;
+  ui.r.onclick = onRight;
+  pipWin.addEventListener('pagehide', () => {
+    pipWin = ui = null;
+    stop(); finished = false; pausedLeft = null;
+    updateDisplay(inputMs()); setState('idle');
+  });
 }
 
-function setPipState(state) {
-  pipState = state;
-  if (!ui) return;
-  const left = state === 'done' ? 'stop' : 'cancel';
-  const right = { running: 'pause', paused: 'resume', idle: 'start', done: 'repeat' }[state];
-  [[ui.l, left], [ui.r, right]].forEach(([b, k]) => { b.textContent = BTN[k][0]; b.className = BTN[k][1]; });
-  ui.l.disabled = state === 'idle';   // like Apple: Cancel is dimmed when no timer is running
-}
+// Keep the PiP window's light/dark theme in sync with the page's toggle
+new MutationObserver(() => {
+  if (pipWin) pipWin.document.documentElement.dataset.theme = document.documentElement.dataset.theme;
+}).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
 function resetPipView() {
   if (!ui) return;
   ui.v.pause(); ui.v.removeAttribute('src'); ui.v.load();
   ui.v.style.display = 'none'; ui.t.style.display = '';
-  ui.t.classList.remove('done'); ui.body.style.background = '#000';
+  ui.t.classList.remove('done'); ui.body.classList.remove('flash');
+}
+
+// Safari: put the video PiP back on the live canvas (after an alert video played)
+function resetVideoPip() {
+  pip.pause(); pip.removeAttribute('src');
+  pip.srcObject = canvas.captureStream(10);
+  pip.muted = true; pip.play().catch(() => {});
 }
 
 // ---- Safari fallback: video PiP, restart via the skip button ----
@@ -189,6 +219,11 @@ async function openVideoPip() {
   await pip.requestPictureInPicture();
   try { navigator.mediaSession.setActionHandler('nexttrack', restart); } catch {}
 }
+pip.addEventListener('leavepictureinpicture', () => {
+  if (useDocPip || (state !== 'running' && state !== 'paused')) return;
+  stop(); finished = false; pausedLeft = null;
+  updateDisplay(inputMs()); setState('idle');
+});
 
 async function start() {
   if (!useDocPip && !document.pictureInPictureEnabled) {
@@ -212,7 +247,7 @@ function beginCountdown() {
   clearInterval(ticker);
   finished = false; pausedLeft = null;
   endTime = Date.now() + totalMs;
-  setPipState('running');
+  setState('running');
   document.title = 'PiP Timer';
   $('status').textContent = 'Running — the PiP window will play when time is up.';
   ticker = setInterval(tick, 200);
@@ -222,14 +257,14 @@ function beginCountdown() {
 function pause() {
   pausedLeft = endTime - Date.now();
   clearInterval(ticker); ticker = null;
-  setPipState('paused');
+  setState('paused');
   $('status').textContent = 'Paused';
 }
 
 function resume() {
   endTime = Date.now() + pausedLeft;
   pausedLeft = null;
-  setPipState('running');
+  setState('running');
   $('status').textContent = 'Running — the PiP window will play when time is up.';
   ticker = setInterval(tick, 200);
   tick();
@@ -240,10 +275,10 @@ function resume() {
 function cancel() {
   clearInterval(ticker); ticker = null;
   finished = false; pausedLeft = null;
-  resetPipView();
-  ui.t.textContent = fmt(totalMs);
+  if (ui) { resetPipView(); ui.t.textContent = fmt(totalMs); }
+  else if (document.pictureInPictureElement) { resetVideoPip(); draw(fmt(totalMs)); }
   updateDisplay(totalMs);
-  setPipState('idle');
+  setState('idle');
   document.title = 'PiP Timer';
   $('status').textContent = '';
 }
@@ -251,12 +286,7 @@ function cancel() {
 // Start (after cancel) / Repeat: run again with the same duration in the open window.
 function restart() {
   if (!pipWin && !document.pictureInPictureElement) return start();
-  if (ui) resetPipView();
-  else {
-    pip.pause(); pip.removeAttribute('src');
-    pip.srcObject = canvas.captureStream(10);
-    pip.muted = true; pip.play().catch(() => {});
-  }
+  if (ui) resetPipView(); else resetVideoPip();
   beginCountdown();
 }
 
@@ -270,7 +300,7 @@ function tick() {
   if (!finished) { finished = true; timesUp(); }
   if (!videoURL) {
     flash = !flash;
-    if (ui) { ui.t.textContent = "TIME'S UP"; ui.t.classList.add('done'); ui.body.style.background = flash ? '#ff3b30' : '#000'; }
+    if (ui) { ui.t.textContent = "TIME'S UP"; ui.t.classList.add('done'); ui.body.classList.toggle('flash', flash); }
     else draw("TIME'S UP", flash ? '#ff3b30' : '#000', '#fff', 64);
   }
 }
@@ -284,7 +314,7 @@ async function playVideo(v) {
 async function timesUp() {
   document.title = "⏰ Time's up!";
   $('status').textContent = "Time's up!";
-  setPipState('done');
+  setState('done');
   if (!videoURL) return beep();
   clearInterval(ticker); ticker = null;
   if (ui) {
@@ -305,8 +335,8 @@ function stop() {
   $('status').textContent = '';
 }
 
-$('start').onclick = start;
-$('stop').onclick = () => { stop(); pipWin?.close(); updateDisplay(inputMs()); };
+$('left').onclick = onLeft;
+$('right').onclick = onRight;
 </script>
 </body>
 </html>
