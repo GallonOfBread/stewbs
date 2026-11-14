@@ -77,7 +77,10 @@
   .in-session:not(.show-setup) .card > h1 { display: none; }
   .in-session:not(.show-setup) .now { border-top: 0; margin-top: 0; padding-top: 0; font-size: 1.2rem; }
   .in-session:not(.show-setup) #display { font-size: clamp(72px, 22vw, 150px); margin: 10px 0; }
-  .in-session:not(.show-setup) .now svg.plates { height: 180px; }
+  .in-session:not(.show-setup) .now svg.plates { height: 240px; }
+  .in-session:not(.show-setup) .now .next, .in-session:not(.show-setup) .now .changes { font-size: 1.15em; }
+  .setup-mode #display { display: none; }
+  .setup-mode .now svg.plates { height: 170px; }
   .in-session:not(.show-setup) .actions button { flex: 1; font-size: 1.3rem; padding: 16px; }
 </style>
 <!-- Shared by the main page and the PiP window (copied into it when it opens) -->
@@ -316,7 +319,7 @@ function target(p) {
 }
 
 let targets = [], stacks = [], cur = 0;
-let loaded = null;   // plates physically on the bar (null = unknown / nothing yet)
+let loadedIdx = null;   // whose plates were last loaded (null = nothing loaded yet this workout)
 
 function replan() {
   targets = cfg.people.map(target);
@@ -365,10 +368,11 @@ $('people').addEventListener('click', e => {
   const i = +b.closest('.person').dataset.i, list = cfg.people;
   const act = b.dataset.act;
   if (act === 'pick') { if (state === 'idle') cur = i; refresh(); return; }
-  const curPerson = list[cur];
+  const curPerson = list[cur], loadedPerson = loadedIdx == null ? null : list[loadedIdx];
   if (act === 'del') list.splice(i, 1);
   else { const j = act === 'up' ? i - 1 : i + 1; [list[i], list[j]] = [list[j], list[i]]; }
   cur = Math.max(0, list.indexOf(curPerson) >= 0 ? list.indexOf(curPerson) : Math.min(i, list.length - 1));
+  if (loadedIdx != null) loadedIdx = list.indexOf(loadedPerson);   // -1: something's on the bar, but not anyone's now
   renderList();
 });
 
@@ -398,41 +402,46 @@ function whoHTML() {
   if (!n) return cfg.reps !== '' ? `<div class="meta">${esc(cfg.reps)} reps</div>` : '';
   const p = cfg.people[cur], t = targets[cur];
   const nav = state === 'idle' && n > 1;
-  const meta = [cfg.reps !== '' ? `${esc(cfg.reps)} reps` : '', `${cur + 1} of ${n}`];
+  const meta = [cfg.reps !== '' ? `${esc(cfg.reps)} reps` : ''];
   if (t && t.err > 0) meta.push(`<span class="err">wanted ${num(parseFloat(p.weight))}, ${t.err} short</span>`);
   if (t && t.err < 0) meta.push(`<span class="err">bar alone is ${num(cfg.bar)}</span>`);
   return `<div class="who">${nav ? '<button class="nav" data-act="prev" aria-label="Previous person">‹</button>' : ''}
       <b>${esc(p.name || 'Person ' + (cur + 1))}</b>${t ? `<span class="wt">${num(t.total)}</span>` : ''}
       ${nav ? '<button class="nav" data-act="next" aria-label="Next person">›</button>' : ''}</div>
-    <div class="meta">${meta.filter(Boolean).join(' · ')}</div>`;
+    ${meta.length ? `<div class="meta">${meta.join(' · ')}</div>` : ''}`;
 }
 
-function changesHTML(from, to, label) {
-  const each = cfg.single ? '' : ' <span class="muted">(each side)</span>';
-  if (from == null) return to.length ? `<div class="changes"><span class="lbl">${label}Load</span> ${chips(to)}${each}</div>` : '';
+function changesHTML(from, to) {
+  if (from == null) return to.length ? `<div class="changes"><span class="lbl">Load</span> ${chips(to)}</div>` : '';
   const { off, on } = changes(from, to);
-  if (!off.length && !on.length) return `<div class="changes"><span class="lbl">${label}No plate changes</span></div>`;
-  return `<div class="changes"><span class="lbl">${label}</span>${off.length ? `Off ${chips(off)}` : ''}${off.length && on.length ? ' · ' : ''}${on.length ? `On ${chips(on)}` : ''}${each}</div>`;
+  if (!off.length && !on.length) return `<div class="changes"><span class="lbl">No plate changes</span></div>`;
+  return `<div class="changes">${off.length ? `<span class="lbl">Off</span> ${chips(off)}` : ''}${off.length && on.length ? ' · ' : ''}${on.length ? `<span class="lbl">On</span> ${chips(on)}` : ''}</div>`;
 }
+
+// Setup (waiting to start, with people): the bar is the focus, plus what to change to get there.
+// Active (running / paused / time's up): the timer and who's next.
+const isSetup = () => state === 'idle' && cfg.people.length > 0;
 
 function platesHTML() {
   const n = cfg.people.length;
-  if (!n || !targets[cur]) return '';
-  const nxt = (cur + 1) % n;
-  let html = diagram(stacks[cur]);
-  if (state === 'idle') html += changesHTML(loaded, stacks[cur], '');
-  if (n > 1) {
-    const np = cfg.people[nxt], nt = targets[nxt];
-    html += `<div class="next">Next: <b style="color:var(--text)">${esc(np.name || 'Person ' + (nxt + 1))}</b>${nt ? ' ' + num(nt.total) : ''}</div>`;
-    if (state !== 'idle' && nt) html += changesHTML(stacks[cur], stacks[nxt], '');
+  if (!n) return '';
+  if (isSetup()) {
+    if (!targets[cur]) return '';
+    // First time round: load from an empty bar. After that: change from the previous person in the
+    // rotation (the last person, for the first) — unless this person's plates are already on.
+    const from = loadedIdx == null ? null : loadedIdx === cur ? stacks[cur] : stacks[(cur + n - 1) % n];
+    return diagram(stacks[cur]) + changesHTML(from, stacks[cur]);
   }
-  return html;
+  if (n < 2) return '';
+  const nxt = (cur + 1) % n, np = cfg.people[nxt], nt = targets[nxt];
+  return `<div class="next">Next: <b style="color:var(--text)">${esc(np.name || 'Person ' + (nxt + 1))}</b>${nt ? ' ' + num(nt.total) : ''}</div>`;
 }
 
 function renderNow() {
-  const who = whoHTML(), plates = platesHTML();
+  const who = whoHTML(), plates = platesHTML(), setup = isSetup();
   $('who').innerHTML = who; $('plates').innerHTML = plates;
-  if (ui) { ui.who.innerHTML = who; ui.plates.innerHTML = plates; }
+  document.body.classList.toggle('setup-mode', setup);
+  if (ui) { ui.who.innerHTML = who; ui.plates.innerHTML = plates; ui.body.classList.toggle('setup-mode', setup); }
 }
 
 function refresh() {
@@ -497,39 +506,33 @@ async function openDocPip() {
   d.documentElement.dataset.theme = document.documentElement.dataset.theme;
   d.head.innerHTML = `<link rel="stylesheet" href="${new URL('/site.css', location.href)}">
   <style>${$('now-css').textContent}</style><style>
-    /* Portrait: one column. Square and landscape: name + timer on the left, plates on the right. */
+    /* One column at every shape; sizes follow the window's height and width. */
     body { margin:0; height:100vh; display:flex; flex-direction:column; gap:2vmin; padding:3vmin 4vmin;
-           background:var(--bg); color:var(--text); font-family:var(--font); font-size:clamp(13px, min(4.4vw, 3.3vh), 30px);
+           background:var(--bg); color:var(--text); font-family:var(--font); font-size:clamp(13px, min(4.4vw, 4vh), 32px);
            text-align:center; box-sizing:border-box; overflow:hidden; }
     body.flash { background:var(--accent); color:#fff; }
     body.flash .now .muted, body.flash .now .meta, body.flash .now .changes, body.flash .now .next,
     body.flash .now .who .wt, body.flash .now .err { color:#fff; }
     body.flash .chip { box-shadow:0 0 0 2px #fff; }
     body.flash .row .primary { background:#fff; color:var(--accent); border-color:#fff; }
-    .main { flex:1; min-height:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2vh; }
-    .left, #plates { width:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.3em; }
-    #t { font-size:min(24vw, 19vh); line-height:1; font-weight:600; font-variant-numeric:tabular-nums; }
-    #t.done { font-size:min(15vw, 12vh); font-weight:700; }
-    .now svg.plates { height:min(22vh, 45vw); margin:0 auto; }
+    .main { flex:1; min-height:0; width:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2.5vh; }
+    #plates { width:100%; display:flex; flex-direction:column; align-items:center; gap:2vh; }
+    .now .who b, .now .who .wt { font-size:1.8em; }
+    #t { font-size:min(28vw, 34vh); line-height:1; font-weight:600; font-variant-numeric:tabular-nums; }
+    #t.done { font-size:min(14vw, 15vh); font-weight:700; }
+    .setup-mode #t { display:none; }
+    .now svg.plates { height:min(40vh, 60vw); margin:0 auto; }
+    .now .next { font-size:1.3em; }
+    .now .changes { font-size:1.2em; }
     .row { display:flex; gap:3vmin; width:100%; }
     .row button { flex:1; height:clamp(40px, 12vh, 110px); border-radius:clamp(8px, 2.5vh, 18px);
-             font:700 clamp(14px, min(6vw, 6vh), 40px) var(--font); cursor:pointer; }
-    @media (min-aspect-ratio: 11/10) {
-      body { font-size:clamp(13px, min(2.8vw, 4.6vh), 30px); }
-      .main { flex-direction:row; gap:4vw; }
-      .now .who b, .now .who .wt { font-size:2em; }
-      .left, #plates { flex:1; min-width:0; height:100%; }
-      #t { font-size:min(17vw, 30vh); }
-      #t.done { font-size:min(8.5vw, 16vh); }
-      .now svg.plates { height:min(36vh, 28vw); }
-      .row button { font-size:clamp(14px, min(4vw, 6vh), 40px); }
-    }
+             font:700 clamp(14px, min(5vw, 6vh), 40px) var(--font); cursor:pointer; }
     .primary { background:var(--accent); color:#fff; border:1px solid var(--accent); }
     .neutral { background:var(--surface); color:var(--text); border:1px solid var(--line); }
     .neutral:hover:not(:disabled) { border-color:var(--muted); }
     .row button:disabled { opacity:.45; cursor:default; }
   </style>`;
-  d.body.innerHTML = `<div class="main now"><div class="left"><div id="who"></div><div id="t"></div></div><div id="plates"></div></div>
+  d.body.innerHTML = `<div class="main now"><div id="who"></div><div id="t"></div><div id="plates"></div></div>
     <div class="row"><button id="l" class="neutral"></button><button id="r" class="primary"></button></div>`;
   ui = { body: d.body, t: d.getElementById('t'), who: d.getElementById('who'), plates: d.getElementById('plates'),
          l: d.getElementById('l'), r: d.getElementById('r') };
@@ -542,6 +545,7 @@ async function openDocPip() {
 // ---- Session: once the timer starts, the settings tuck away behind the gear ----
 function setSession(on) {
   document.body.classList.toggle('in-session', on);
+  if (!on) loadedIdx = null;   // next workout starts from an empty bar
   showSetup(false);
 }
 function showSetup(on) {
@@ -569,7 +573,7 @@ async function start() {
   setSession(true);
   clearAlarm();
   finished = false; pausedLeft = null;
-  if (cfg.people.length && targets[cur]) loaded = stacks[cur];
+  if (cfg.people.length && targets[cur]) loadedIdx = cur;
   endTime = Date.now() + totalMs;
   setState('running');
   if ($('status').textContent.startsWith('Link')) $('status').textContent = '';
