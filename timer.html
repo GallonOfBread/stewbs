@@ -56,6 +56,7 @@
   .icon .lucide { width: 18px; height: 18px; }
   .person .chips { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 0; font-size: 0.85rem; }
   .person .chips:empty { display: none; }
+  .hint { margin: 12px 0 0; font-size: 0.8rem; color: var(--muted); }
   .list-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 
   .actions { display: flex; gap: 8px; justify-content: center; margin-top: 16px; }
@@ -144,6 +145,7 @@
         <button class="ghost" id="add">+ Add person</button>
         <button class="ghost" id="copy">Copy link</button>
       </div>
+      <p class="hint">Clicker: forward = red button · back = left button (or previous person) · top = next person</p>
     </div>
     </div>
 
@@ -448,11 +450,17 @@ function refresh() {
   replan(); refreshList(); renderNow(); writeURL();
 }
 
-function onNowClick(e) {
-  const b = e.target.closest('[data-act]'); if (!b || state !== 'idle') return;
+// Move to the next (+1) or previous (-1) person; only while waiting to start.
+function stepPerson(dir) {
   const n = cfg.people.length;
-  cur = (cur + (b.dataset.act === 'next' ? 1 : n - 1)) % n;
+  if (state !== 'idle' || n < 2) return;
+  cur = (cur + dir + n) % n;
   refreshList(); renderNow();
+}
+
+function onNowClick(e) {
+  const b = e.target.closest('[data-act]');
+  if (b) stepPerson(b.dataset.act === 'next' ? 1 : -1);
 }
 document.querySelector('.card .now').addEventListener('click', onNowClick);
 
@@ -499,6 +507,26 @@ function setState(s) {
 const onLeft = () => { if (state !== 'idle') cancel(); };
 const onRight = () => ({ idle: start, running: pause, paused: resume, done: next })[state]();
 
+// ---- Presentation clicker (it acts as a keyboard) ----
+// Forward = the red button. Back = the left button, or the previous person while waiting.
+// Top button (F5 / Esc / B / . depending on the model) = next person while waiting.
+const KEYS = {
+  forward: ['PageDown', 'ArrowRight', 'ArrowDown'],
+  back: ['PageUp', 'ArrowLeft', 'ArrowUp'],
+  top: ['F5', 'Escape', 'b', 'B', '.'],
+};
+function onKey(e) {
+  if (e.target.closest?.('input, select, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const act = Object.keys(KEYS).find(k => KEYS[k].includes(e.key));
+  if (!act) return;
+  e.preventDefault();   // no page scroll, no F5 reload
+  if (e.repeat) return;
+  if (act === 'forward') onRight();
+  else if (act === 'back') state === 'idle' ? stepPerson(-1) : onLeft();
+  else stepPerson(1);
+}
+document.addEventListener('keydown', onKey);
+
 // ---- Chrome/Edge: Document PiP window, styled with the site's stylesheet and theme ----
 async function openDocPip() {
   pipWin = await documentPictureInPicture.requestWindow({ width: 420, height: 560 });
@@ -539,6 +567,8 @@ async function openDocPip() {
   ui.l.onclick = onLeft;
   ui.r.onclick = onRight;
   d.body.addEventListener('click', onNowClick);
+  d.addEventListener('keydown', onKey);
+  try { pipWin.focus(); } catch {}   // so the clicker works right away (otherwise click the window once)
   pipWin.addEventListener('pagehide', () => { pipWin = ui = null; cancel(); setSession(false); });
 }
 
