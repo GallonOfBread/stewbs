@@ -734,10 +734,10 @@ function afterDataChange() {
 function postedWins() {
   return wins.filter(w => inLinkDays(w) && !isIncomplete(w)).reverse();
 }
-// Only the newest win in the deck, and only if it's in this link's days (the sheet enforces this too)
+// Any win in this link's days can be deleted; its number is left as a gap (the sheet enforces this too)
 function canDeleteWin(id) {
-  const last = wins[wins.length - 1];
-  return !!last && last.id === id && inLinkDays(last);
+  const w = wins.find(x => x.id === id);
+  return !!w && inLinkDays(w);
 }
 
 // ── Readable card names ────────────────────────────────────────────────────
@@ -1181,7 +1181,7 @@ function commitNewWin() {
   flashId       = id;
   showToast(`Added #${id}`, () => {
     const w = findWin(win);
-    if (!w || !canDeleteWin(w.id)) { showToast("Can't undo: a newer win was added after it."); return; }
+    if (!w) return;
     wins.splice(wins.indexOf(w), 1);
     enqueue('delete', { id: w.id }, `Removing #${w.id}`);
     selectedWinId = null;
@@ -1484,14 +1484,16 @@ function deleteWin() {
   wins.splice(wins.indexOf(removed), 1);
   enqueue('delete', { id: removed.id }, `Deleting #${removed.id}`);
   selectedWinId = null;
-  // Undo adds it back (same ID, since it was the newest), then restores who signed
+  // Undo puts it back with the same number, in number order
   showToast(`Deleted #${removed.id}`, () => {
-    const id = nextWinId();
-    const win = Object.assign({}, removed, { id, signer: '?', cardId: '' });
-    wins.push(win);
-    enqueue('add', { color: removed.color, value: removed.value, date: removed.date, tempId: id }, `Win #${id}`);
-    if (!isIncomplete(removed)) setSigner(win, removed.signer, removed.cardId);
-    selectedWinId = id;
+    if (wins.some(w => w.id === removed.id)) return;
+    const at = wins.findIndex(w => Number(w.id) > Number(removed.id));
+    wins.splice(at < 0 ? wins.length : at, 0, removed);
+    enqueue('restore', {
+      id: removed.id, color: removed.color, value: removed.value,
+      signer: removed.signer, date: removed.date, cardId: removed.cardId,
+    }, `Restoring #${removed.id}`);
+    selectedWinId = removed.id;
   });
   afterDataChange();
 }

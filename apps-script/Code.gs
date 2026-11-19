@@ -117,15 +117,41 @@ const ACTIONS = {
     return Object.assign({ id: id }, linkInfo(link, wins));
   },
 
-  // Only the newest win in the deck, and only if it's within the link's days, so IDs stay in order
+  // Remove a win within the link's days. Its number is left as a gap.
   delete(link, req) {
     const wins = readWins(link.deck);
-    const last = wins[wins.length - 1];
-    if (!last || last.id !== String(req.id)) throw new ApiError('not-allowed');
-    if (!inRange(dayKey(last.date), link)) throw new ApiError('not-allowed');
-    deckSheet(link.deck).deleteRow(last.row);
-    wins.pop();
+    const win = ownWin(wins, link, req.id);
+    deckSheet(link.deck).deleteRow(win.row);
+    wins.splice(wins.indexOf(win), 1);
     return linkInfo(link, wins);
+  },
+
+  // Undo of a delete: put the row back with its original number, in number order.
+  // Only into an unused number, and only on one of the link's days.
+  restore(link, req) {
+    const id = String(req.id || '');
+    if (!/^\d+$/.test(id)) throw new ApiError('bad-request');
+    const wins = readWins(link.deck);
+    if (wins.some(w => w.id === id)) throw new ApiError('not-allowed');
+    const key = dayKey(req.date);
+    if (!inRange(key, link)) throw new ApiError('not-allowed');
+    const color = cleanText(req.color, 20);
+    const value = cleanText(req.value, 20);
+    if (DECKS[link.deck].colors.indexOf(color) === -1 || !value) throw new ApiError('bad-request');
+    const signer = cleanText(req.signer, MAX_NAME) || '?';
+    const cardId = cleanText(req.cardId, 16);
+    const sheet = deckSheet(link.deck);
+    const after = wins.find(w => Number(w.id) > Number(id));
+    let row;
+    if (after) {
+      sheet.insertRowBefore(after.row);
+      row = after.row;
+    } else {
+      row = Math.max(sheet.getLastRow(), 1) + 1;
+    }
+    sheet.getRange(row, 1, 1, 6).setNumberFormat('@')
+      .setValues([[id, color, value, asText(signer), keyToMdy(key), asText(cardId)]]);
+    return linkInfo(link, readWins(link.deck));
   },
 };
 
