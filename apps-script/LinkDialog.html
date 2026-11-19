@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<style>
+  [hidden] { display: none !important; }
+  body { font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1c1d21; margin: 0; padding: 2px; }
+  h2 { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #5c5f67; margin: 18px 0 8px; }
+  h2:first-child { margin-top: 0; }
+  label.field { display: block; font-size: 12px; font-weight: 700; color: #5c5f67; margin: 0 0 4px; }
+  select, input[type="date"] { font: inherit; width: 100%; box-sizing: border-box; padding: 7px 10px; border: 1px solid #d9dbe0; border-radius: 8px; background: #fff; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  .choice { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+  .choice input { margin: 0; }
+  .indent { margin-left: 24px; }
+  .row { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
+  button { font: 600 13px system-ui, sans-serif; border: none; border-radius: 8px; padding: 8px 12px; cursor: pointer; background: #ececef; color: #1c1d21; }
+  button.primary { background: #c62d28; color: #fff; }
+  button.small { padding: 4px 9px; font-size: 12px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .muted { color: #5c5f67; font-size: 13px; }
+  .err { color: #c62d28; margin-top: 8px; }
+  .list { border: 1px solid #d9dbe0; border-radius: 8px; overflow: hidden; }
+  .item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-top: 1px solid #ececef; }
+  .item:first-child { border-top: none; }
+  .item .text { flex: 1; min-width: 0; }
+  .item .main { font-weight: 600; }
+  .item .sub { font-size: 12px; color: #5c5f67; }
+  .new { background: #fdf3f2; }
+  .scroll { max-height: 170px; overflow-y: auto; }
+</style>
+</head>
+<body>
+  <h2>New link</h2>
+  <label class="field" for="deck">Deck</label>
+  <select id="deck"></select>
+  <div class="grid">
+    <div><label class="field" for="from">From</label><input id="from" type="date"></div>
+    <div><label class="field" for="to">To</label><input id="to" type="date"></div>
+  </div>
+  <div style="margin-top:10px">
+    <label class="choice"><input type="radio" name="mode" value="range" checked> One link for all these days</label>
+    <label class="choice"><input type="radio" name="mode" value="perDay"> One link per day, for a group</label>
+    <label class="choice indent" id="skipRow" hidden><input type="checkbox" id="skip" checked> Skip weekends</label>
+  </div>
+  <div class="row">
+    <button class="primary" id="create" disabled>Create</button>
+    <span class="muted">Each link works for 24 hours from when it's first opened.</span>
+  </div>
+  <p class="err" id="error"></p>
+
+  <div id="madeBox" hidden>
+    <h2>Just made</h2>
+    <div class="list scroll" id="made"></div>
+    <div class="row"><button id="copyAll">Copy all</button></div>
+  </div>
+
+  <h2>Active links</h2>
+  <div class="list scroll" id="active"><div class="item muted">Loading…</div></div>
+
+  <textarea id="clip" style="position:absolute;left:-9999px" aria-hidden="true"></textarea>
+
+<script>
+  var $ = function (id) { return document.getElementById(id); };
+  var data = null;
+  var lastMade = [];
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function copy(text, btn) {
+    $('clip').value = text;
+    $('clip').select();
+    document.execCommand('copy');
+    if (btn) { var old = btn.textContent; btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = old; }, 1200); }
+  }
+
+  function fail(e) {
+    $('error').textContent = e.message || String(e);
+    $('create').disabled = false;
+  }
+
+  // Fill From/To with the selected deck's defaults
+  function applyDefaults() {
+    var d = data.decks.filter(function (x) { return x.id === $('deck').value; })[0];
+    $('from').value = d.from;
+    $('to').value = d.to;
+  }
+
+  function mode() {
+    return document.querySelector('input[name="mode"]:checked').value;
+  }
+
+  function renderActive(list) {
+    $('active').innerHTML = list.length ? list.map(function (l) {
+      return '<div class="item"><div class="text"><div class="main">' + esc(l.label) + '</div>' +
+        '<div class="sub">' + esc(l.deck) + ' · ' + esc(l.status) + '</div></div>' +
+        '<button class="small" data-copy="' + esc(l.url) + '">Copy</button>' +
+        '<button class="small" data-cancel="' + esc(l.code) + '">Cancel</button></div>';
+    }).join('') : '<div class="item muted">No active links.</div>';
+  }
+
+  function renderMade(res) {
+    lastMade = res.links;
+    $('madeBox').hidden = false;
+    $('made').innerHTML = res.links.map(function (l) {
+      return '<div class="item new"><div class="text"><div class="main">' + esc(l.label) + '</div>' +
+        '<div class="sub">' + esc(res.deck) + '</div></div>' +
+        '<button class="small" data-copy="' + esc(l.url) + '">Copy</button></div>';
+    }).join('');
+    $('copyAll').textContent = res.links.length > 1 ? 'Copy all ' + res.links.length : 'Copy link';
+  }
+
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.copy) copy(b.dataset.copy, b);
+    if (b.dataset.cancel) {
+      if (!confirm('Cancel this link? It stops working right away.')) return;
+      b.disabled = true;
+      google.script.run.withSuccessHandler(renderActive).withFailureHandler(fail).cancelLink(b.dataset.cancel);
+    }
+  });
+
+  $('deck').onchange = applyDefaults;
+  document.querySelectorAll('input[name="mode"]').forEach(function (r) {
+    r.onchange = function () { $('skipRow').hidden = mode() !== 'perDay'; };
+  });
+
+  $('create').onclick = function () {
+    $('error').textContent = '';
+    $('create').disabled = true;
+    google.script.run
+      .withSuccessHandler(function (res) {
+        $('create').disabled = false;
+        renderMade(res);
+        renderActive(res.active);
+      })
+      .withFailureHandler(fail)
+      .createShareLinks($('deck').value, $('from').value, $('to').value, mode() === 'perDay', $('skip').checked);
+  };
+
+  $('copyAll').onclick = function () {
+    copy(lastMade.map(function (l) {
+      return lastMade.length > 1 ? l.label + ' — ' + l.url : l.url;
+    }).join('\n'), $('copyAll'));
+  };
+
+  google.script.run
+    .withSuccessHandler(function (d) {
+      data = d;
+      $('deck').innerHTML = d.decks.map(function (x) {
+        return '<option value="' + esc(x.id) + '"' + (x.id === d.defaultDeck ? ' selected' : '') + '>' + esc(x.name) + '</option>';
+      }).join('');
+      applyDefaults();
+      renderActive(d.active);
+      $('create').disabled = false;
+    })
+    .withFailureHandler(fail)
+    .dialogData();
+</script>
+</body>
+</html>

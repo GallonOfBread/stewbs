@@ -1,0 +1,1619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spicy Uno Signatures</title>
+<meta name="description" content="Who signed which Spicy Uno card after each win.">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#ffffff">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/site.css">
+<script src="/theme.js"></script>
+<script src="/uno-decks.js"></script>
+<style>
+  :root {
+    --page-width: 1040px;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --ok: #1f7a45;
+    /* How strongly a suit color shows as text, fill and border */
+    --ink-mix: 62%; --fill-mix: 10%; --edge-mix: 55%;
+    /* Solid fills for buttons, chips and toggles */
+    --btn: color-mix(in srgb, var(--text) 9%, var(--bg));
+    --btn-hover: color-mix(in srgb, var(--text) 15%, var(--bg));
+  }
+  [data-theme="dark"] {
+    --ok: #4ade80;
+    --ink-mix: 72%; --fill-mix: 16%; --edge-mix: 50%;
+    --btn: color-mix(in srgb, var(--text) 11%, var(--bg));
+    --btn-hover: color-mix(in srgb, var(--text) 18%, var(--bg));
+  }
+
+  .intro { color: var(--muted); margin: 0 0 24px; }
+
+  /* Anything colored by a suit sets --suit inline; these derive readable shades for both themes */
+  .suit {
+    --ink:  color-mix(in srgb, var(--suit) var(--ink-mix), var(--text));
+    --fill: color-mix(in srgb, var(--suit) var(--fill-mix), var(--bg));
+    --edge: color-mix(in srgb, var(--suit) var(--edge-mix), var(--bg));
+  }
+
+
+
+  /* ---------- Controls ---------- */
+  .btn {
+    font: 600 0.95rem var(--font); color: var(--text); background: var(--btn);
+    border: none; border-radius: 10px; padding: 8px 14px; min-height: 40px; cursor: pointer;
+    transition: background-color .1s, filter .1s, opacity .15s;
+  }
+  .btn:hover { background: var(--btn-hover); }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent); filter: brightness(1.1); }
+  .btn-sm { min-height: 32px; padding: 4px 10px; font-size: 0.85rem; }
+
+  input[type="text"], input[type="date"] {
+    font: 400 1rem var(--font); color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; width: 100%;
+  }
+  input[type="text"]:focus, input[type="date"]:focus { outline: none; border-color: var(--accent); }
+  .mono { font-family: var(--mono); }
+
+  .field-label { display: block; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .field-label .hint { font-weight: 400; letter-spacing: 0; text-transform: none; }
+
+  .status-msg { font-size: 0.9rem; color: var(--muted); }
+  .status-msg.ok  { color: var(--ok); }
+  .status-msg.err { color: var(--accent); }
+
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .stack { display: flex; flex-direction: column; gap: 12px; }
+
+
+
+  /* ---------- Fill: queue + detail ---------- */
+  .fill-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 24px; align-items: start; }
+
+  .incomplete-sidebar {
+    position: sticky; top: 16px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  }
+  .sidebar-header {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    padding: 10px 12px; border-bottom: 1px solid var(--line);
+    font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+  }
+  .sidebar-count { color: var(--text); }
+  .incomplete-list { position: relative; max-height: max(180px, calc(50vh - 90px)); overflow-y: auto; background: var(--bg); }
+
+  .inc-item {
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer;
+    border-bottom: 1px solid var(--line); border-left: 3px solid transparent; font-size: 0.95rem;
+  }
+  .inc-item:hover { background: var(--surface); }
+  .inc-item.selected { background: var(--tint); border-left-color: var(--accent); }
+  .inc-item:focus-visible { outline-offset: -2px; }
+  .inc-item .win-num { color: var(--muted); font-family: var(--mono); font-size: 0.8rem; min-width: 38px; }
+  .inc-item.pinned { opacity: 0.6; }
+  .pin-btn {
+    margin-left: auto; flex-shrink: 0; display: flex; padding: 6px; border: none; border-radius: 8px;
+    background: none; color: var(--muted); cursor: pointer; opacity: 0;
+  }
+  .pin-btn .lucide { width: 16px; height: 16px; }
+  .inc-item:hover .pin-btn, .pin-btn:focus-visible { opacity: 1; }
+  .pin-btn:hover { color: var(--text); }
+  .inc-item.pinned .pin-btn { opacity: 1; color: var(--accent); }
+  .deferred-header {
+    padding: 6px 12px; border-bottom: 1px solid var(--line); background: var(--surface);
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+  }
+
+  .sort-toggle { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--btn); }
+  .sort-toggle button {
+    font: 600 0.78rem var(--font); padding: 3px 9px; border: none; border-radius: 6px;
+    background: transparent; color: var(--muted); cursor: pointer;
+  }
+  .sort-toggle button:hover { color: var(--text); }
+  .sort-toggle button.active { background: var(--text); color: var(--bg); }
+
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; background: var(--suit); }
+
+  .detail-panel { display: flex; flex-direction: column; gap: 20px; min-width: 0; scroll-margin-top: 16px; }
+  .detail-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+  .detail-title h2 { margin: 0; font-size: 1.8rem; line-height: 1.1; color: var(--ink); }
+  .detail-title .sub { color: var(--muted); font-size: 0.95rem; }
+
+  .section-label { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+  .section-label .hint { font-weight: 400; letter-spacing: 0; text-transform: none; }
+
+  /* ---------- Cards ---------- */
+  .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(116px, 1fr)); gap: 10px; }
+  .uno-card {
+    display: flex; flex-direction: column; min-height: 150px; padding: 0; overflow: hidden; cursor: pointer;
+    border: 2px solid var(--suit); border-radius: 10px; background: var(--fill); color: var(--text);
+    font: inherit; text-align: left; transition: transform .1s, box-shadow .1s;
+  }
+  .uno-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,.15); }
+  .uno-card.sel-card { outline: 3px solid var(--text); outline-offset: 2px; }
+  /* Solid top: card number, total, value */
+  .card-head { background: var(--suit); color: var(--on); padding: 6px 8px 4px; }
+  .card-meta { display: flex; justify-content: space-between; gap: 6px; font-size: 0.72rem; font-weight: 700; white-space: nowrap; opacity: .9; }
+  .card-head .cval { font-size: 1.4rem; font-weight: 700; line-height: 1.15; }
+  /* Faded body: one row per signer, star | name | ×count */
+  .card-body { flex: 1; display: flex; flex-direction: column; gap: 1px; padding: 6px 8px 8px; }
+  .sn { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 4px; align-items: baseline; font-size: 0.8rem; line-height: 1.4; }
+  .sn .star { color: var(--ink); font-size: 0.7rem; }
+  .sn .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sn .mult { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .sn.more .name { color: var(--muted); }
+  .uno-card.new-card { border-style: dashed; background: transparent; }
+  /* Step 1 heading, with the first-signer dropdown on the right */
+  .step-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; margin: 0 0 10px; }
+  .step-head .section-label { margin: 0; }
+  .filter-select {
+    font: 600 0.9rem var(--font); color: var(--text); background: var(--btn);
+    border: none; border-radius: 10px; padding: 7px 10px; max-width: 100%; cursor: pointer;
+  }
+  .filter-select.is-on { background: var(--accent); color: #fff; }
+  /* Step 1 after a pick: just that card, a bit bigger, with Change card beside it */
+  .picked-row { display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .picked-row .uno-card { width: 220px; max-width: 100%; min-height: 0; }
+  .picked-row .uno-card:hover { transform: none; }
+  #cardStep { scroll-margin-top: 16px; }
+  .new-card .card-head { background: transparent; color: var(--ink); }
+  .new-card .new-label { font-size: 0.8rem; color: var(--muted); }
+  .no-cards { color: var(--muted); }
+
+  /* ---------- Fill form ---------- */
+  .fill-form { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .form-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+  .form-field { display: flex; flex-direction: column; flex: 1; min-width: 160px; }
+  .autocomplete-wrapper { position: relative; }
+  .autocomplete-list {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 10; max-height: 200px; overflow-y: auto;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 20px rgba(0,0,0,.18);
+  }
+  .autocomplete-list:empty { display: none; }
+  .autocomplete-list div { padding: 8px 12px; cursor: pointer; }
+  .autocomplete-list div:hover, .autocomplete-list div.hl { background: var(--tint); }
+
+  .nav-row { display: flex; gap: 8px; }
+
+  /* ---------- New win ---------- */
+  .new-win-title { display: flex; align-items: baseline; gap: 12px; }
+  .new-win-title h2 { margin: 0; font-size: 1.8rem; line-height: 1.1; }
+  .new-win-title .sub { color: var(--muted); font-family: var(--mono); }
+  .key-btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .key-btn {
+    display: flex; align-items: center; gap: 6px; min-height: 44px; min-width: 44px; justify-content: center;
+    padding: 6px 12px; border: none; border-radius: 10px; background: var(--suit); color: var(--on);
+    font: 700 1rem var(--font); cursor: pointer; transition: opacity .1s, transform .1s, filter .1s;
+  }
+  .key-btn:hover { filter: brightness(1.07); transform: translateY(-1px); }
+  .key-btn.active { outline: 3px solid var(--text); outline-offset: 2px; }
+  /* Once one is picked, fade the rest */
+  .key-btn-row:has(.active) .key-btn:not(.active) { opacity: .4; }
+  .key-btn .kh { font-family: var(--mono); }
+  .key-btn .kn { font-weight: 600; font-size: 0.85rem; }
+  .nw-section { transition: opacity .15s; }
+  .nw-section.dimmed { opacity: .3; pointer-events: none; }
+
+  /* ---------- Steps, name chips, posted list ---------- */
+  .step-num {
+    display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-right: 6px;
+    border-radius: 50%; background: var(--text); color: var(--bg); font-size: 0.75rem; letter-spacing: 0; vertical-align: 1px;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .chip {
+    transition: background-color .12s, color .12s;
+    font: 600 0.9rem var(--font); color: var(--text); background: var(--btn); cursor: pointer;
+    border: none; border-radius: 999px; padding: 6px 12px; min-height: 36px;
+    max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .chip:hover { background: var(--btn-hover); }
+  .chip.active { background: var(--accent); color: #fff; }
+  .btn-primary.is-waiting { opacity: .45; }
+  .btn-danger { color: var(--accent); }
+  .save-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .save-row .spacer { flex: 1; }
+  .inc-day { margin-left: 6px; color: var(--muted); font-size: 0.8rem; }
+  #nwDay { width: auto; min-width: 160px; }
+  .inc-name { white-space: nowrap; }
+  .inc-signer { flex: 1 1 auto; min-width: 0; margin-left: auto; text-align: right; color: var(--muted); font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sidebar-header.lower { border-top: 1px solid var(--line); }
+  .list-empty { padding: 10px 12px; color: var(--muted); font-size: 0.9rem; }
+
+  /* ---------- Help ---------- */
+  .topbar .help-btn { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; padding: 0; border-radius: 999px; }
+  .help-dialog {
+    width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow-y: auto; padding: 0;
+    border: none; border-radius: 14px; background: var(--bg); color: var(--text);
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+  }
+  .help-dialog::backdrop { background: rgba(0,0,0,.45); }
+  .help-dialog[open] { animation: pop .18s ease-out; }
+  .help-dialog .help-body { padding: 20px 22px 22px; }
+  .help-dialog h2 { margin: 0; font-size: 1.4rem; }
+  .help-dialog h3 { margin: 20px 0 8px; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .help-dialog ol, .help-dialog ul { margin: 0; padding-left: 1.3em; }
+  .help-dialog li { margin: 4px 0; }
+  .help-dialog p { margin: 6px 0 0; }
+  .help-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .help-close { display: inline-flex; padding: 8px; }
+  .help-close .lucide { width: 18px; height: 18px; }
+  .keys { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+  .keys td { padding: 5px 0; vertical-align: top; border-top: 1px solid var(--line); }
+  .keys td:first-child { width: 42%; padding-right: 12px; white-space: nowrap; }
+  kbd {
+    display: inline-block; min-width: 1.6em; padding: 1px 6px; margin: 0 1px; text-align: center;
+    font: 600 0.8rem var(--mono); border-radius: 6px; background: var(--btn); border-bottom: 2px solid var(--line);
+  }
+
+  /* ---------- Page states, toast ---------- */
+  #app { border-top: 1px solid var(--line); padding-top: 24px; }
+  .sync-status { font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+  .sync-status.retry { color: var(--accent); }
+  .toast {
+    position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 50;
+    display: flex; align-items: center; gap: 12px; max-width: calc(100% - 32px);
+    padding: 8px 8px 8px 16px; border-radius: 12px; background: var(--text); color: var(--bg);
+    box-shadow: 0 8px 24px rgba(0,0,0,.25);
+  }
+  .toast .btn { background: color-mix(in srgb, var(--bg) 22%, var(--text)); color: var(--bg); }
+  .toast .btn:hover { background: color-mix(in srgb, var(--bg) 32%, var(--text)); }
+
+  .empty-state { text-align: center; padding: 48px 16px; color: var(--muted); }
+  .empty-state strong { display: block; font-size: 1.4rem; color: var(--text); margin-bottom: 4px; }
+
+  /* ---------- Motion: short, and only for things the viewer did ---------- */
+  @keyframes rise  { from { opacity: 0; transform: translateY(6px); } }
+  @keyframes pop   { from { opacity: 0; transform: scale(.96); } }
+  @keyframes fade  { from { opacity: 0; } }
+  @keyframes flash { from { background-color: color-mix(in srgb, var(--accent) 28%, transparent); } }
+  @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 12px); } }
+  .detail-panel.enter { animation: rise .2s ease-out; }
+  .cards-grid.enter .uno-card { animation: rise .2s ease-out backwards; }
+  .picked-row.enter .uno-card { animation: pop .18s ease-out; }
+  .picked-row.enter #changeCard { animation: fade .25s ease-out; }
+  .inc-item.flash { animation: flash .9s ease-out; }
+  .toast { animation: toast-in .18s ease-out; transition: opacity .15s, transform .15s; }
+  .toast.leaving { opacity: 0; transform: translate(-50%, 12px); }
+  .sync-status, .empty-state { animation: fade .2s ease-out; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  }
+
+  /* ---------- Phone ---------- */
+  @media (max-width: 760px) {
+    .fill-layout { grid-template-columns: 1fr; gap: 20px; }
+    .incomplete-sidebar { position: static; }
+    .incomplete-list { max-height: 220px; }
+    .cards-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
+    .detail-title h2, .new-win-title h2 { font-size: 1.5rem; }
+    .nav-row .btn { flex: 1; }
+  }
+  /* Touch screens can't hover, so keep the pin buttons visible */
+  @media (hover: none) {
+    .pin-btn { opacity: 1; }
+    .uno-card:hover, .key-btn:hover { transform: none; }
+  }
+</style>
+</head>
+<body>
+<main class="page">
+  <nav class="topbar">
+    <a class="home" href="/"><svg class="lucide" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>stewbs</a>
+    <div class="topbar-actions">
+      <span class="sync-status" id="syncStatus" role="status" hidden></span>
+      <button type="button" class="help-btn" id="helpBtn" aria-label="How this works" title="How this works (?)" aria-haspopup="dialog">
+        <svg class="lucide" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+      </button>
+      <button type="button" class="switch" data-theme-toggle role="switch" aria-label="Dark mode" title="Dark mode"></button>
+    </div>
+  </nav>
+
+  <p class="kicker" id="kicker">Spicy Uno</p>
+  <h1>Signatures</h1>
+  <p class="intro" id="intro">Who signed which card after each win.</p>
+
+  <section id="app"><div id="fillContent"></div></section>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <dialog class="help-dialog" id="helpDialog" aria-labelledby="helpTitle"><div class="help-body" id="helpBody"></div></dialog>
+</main>
+
+<script>
+// Physical-card suffixes, in order. Only ever append, so existing IDs keep their "Card N" number.
+const SUFFIX_SEQ  = `123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%!&()*+-/;<=>?^|~0αβγδεζηθικλμνξοπρστυφχψω`;
+const WILD_COLOR = '#7c7f87';
+
+// Physical decks we track. `scheme` names a color scheme in /uno-decks.js;
+// `colorKeys` are the keyboard shortcuts for picking a color on a new win.
+const DECKS = {
+  gridfetti: { name: 'Gridfetti 3.0', scheme: '90s', colorKeys: { g: 'Gold', r: 'Pink', p: 'Purple', t: 'Teal', w: 'Wild' } },
+  matrix:    { name: 'Matrix',        scheme: '00s', colorKeys: { b: 'Blue', g: 'Green', r: 'Red', y: 'Yellow', w: 'Wild' } },
+};
+
+// Autofocus only with a mouse; on phones it pops the keyboard and jumps the page
+const CAN_AUTOFOCUS = matchMedia('(hover: hover) and (pointer: fine)').matches;
+const NARROW = matchMedia('(max-width: 760px)');
+
+let activeDeck    = 'matrix';   // replaced by the link's deck once it opens
+let COLOR_KEYS    = DECKS[activeDeck].colorKeys;
+
+let wins          = [];
+let selectedWinId = null;
+let acHl          = -1;
+let sortMode      = 'color'; // 'color' | 'chrono'
+let pinnedIds     = new Set();
+let inNewWinMode  = false;
+let newWinDraft   = { color: null, value: null };
+let newWinDay     = '';   // day picked for new wins (YYYY-MM-DD); remembered between wins
+let pickedCardId  = '';   // card chosen in step 1 of the open win
+let cardGridOpen  = true; // step 1 shows every card (true) or just the picked one (false)
+let cardTiles     = { order: [], html: {}, first: {}, newCid: '', win: null };  // tiles for the open win
+let cardFilter    = '';     // first signer to show cards for ('' = all)
+let filterWinId   = null;   // the win the filter belongs to (it resets on another win)
+let toastTimer    = null;
+let flashId       = null;   // win to flash in the queue on the next draw (just posted or added)
+let shownKey      = null;   // what the detail panel last showed, so it only animates on a change
+// Focus only moves on its own for keyboard users, so taps on a phone never pop the keyboard up
+let usingKeyboard = false;
+
+// ── Escaping: every value from the data goes through this before it lands in HTML ──
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ── Suit colors (from /uno-decks.js) ───────────────────────────────────────
+function suitColor(color) {
+  const name = String(color).toLowerCase();
+  const find = scheme => scheme && ['a', 'b', 'c', 'd'].map(s => scheme[s]).find(([n]) => n.toLowerCase() === name);
+  const hit = find(UNO_DECKS[DECKS[activeDeck].scheme]) || Object.values(UNO_DECKS).map(find).find(Boolean);
+  return hit ? hit[1] : WILD_COLOR;
+}
+// Dark or white text, whichever reads better on a solid suit color
+const colorCtx = document.createElement('canvas').getContext('2d');
+function textOn(color) {
+  colorCtx.fillStyle = '#000'; colorCtx.fillStyle = color;   // normalises names like "Blue" to #rrggbb
+  const hex = colorCtx.fillStyle;
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map(v => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.179 ? '#1c1d21' : '#ffffff';
+}
+function suitStyle(color) {
+  const c = suitColor(color);
+  return `--suit:${esc(c)};--on:${textOn(c)}`;
+}
+
+// ── Share link + sheet API ─────────────────────────────────────────────────
+// The page only works from a share link: stewbs.com/signatures#CODE. The code stays after
+// the #, so it never reaches GitHub's servers. Wins live in the Google Sheet behind this
+// Apps Script web app (apps-script/Code.gs); nothing is saved in the browser.
+const PROD_API = 'https://script.google.com/macros/s/AKfycby9GCZ5w-2jrnLqmvhTSQWwmTa5J0WEUsK1hncPz2RndKMQ0So_kD8TbE8EkWzJpkFSBA/exec';
+// Local testing only: on localhost, ?api=/path points the page at a fake server
+const IS_LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+const SCRIPT_URL = (IS_LOCAL && new URLSearchParams(location.search).get('api')) || PROD_API;
+
+let linkCode = '';
+let link     = null;   // { deck, date, expires } once the link opens
+
+class LinkError extends Error {}
+
+const ERROR_TEXT = {
+  network:       "Couldn't reach the sheet. Check your connection and try again.",
+  busy:          'The sheet is busy. Try again in a moment.',
+  'not-allowed': "That win isn't on one of this link's days.",
+  'not-found':   'That win is no longer in the sheet, so the list was refreshed.',
+  'bad-request': "The sheet didn't accept that change.",
+  'not-set-up':  "The sheet isn't set up yet.",
+  server:        'Something went wrong on the sheet side. Try again.',
+};
+
+function readCode() {
+  const m = /^#([A-Za-z0-9]{12})$/.exec(location.hash);
+  return m ? m[1] : '';
+}
+
+// One call to the sheet. Every successful reply carries the link's days and the deck's
+// current wins; callers decide whether to use those wins.
+async function api(action, data) {
+  let res;
+  try {
+    const r = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      // text/plain keeps this a "simple" request, so the browser skips the CORS preflight
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(Object.assign({ action, code: linkCode }, data)),
+    });
+    res = await r.json();
+  } catch (e) {
+    throw new Error('network');
+  }
+  if (!res.ok) {
+    if (res.error === 'expired' || res.error === 'invalid-link') {
+      showGate(res.error);
+      throw new LinkError(res.error);
+    }
+    throw new Error(res.error || 'server');
+  }
+  link = { deck: res.deck, from: res.from, to: res.to, expires: res.expires ? new Date(res.expires) : null };
+  if (DECKS[res.deck]) { activeDeck = res.deck; COLOR_KEYS = DECKS[activeDeck].colorKeys; }
+  updateHeader();
+  return res;
+}
+
+// ── Background saving ──────────────────────────────────────────────────────
+// Changes show on the page straight away, then go to the sheet one at a time, in order.
+// Each Apps Script call takes a few seconds, so nobody waits on them.
+const queue = [];      // { action, data, label, tries }
+let syncing = false;
+let syncTimer = null;
+
+function enqueue(action, data, label) {
+  queue.push({ action, data, label, tries: 0 });
+  setSync('saving');
+  pump();
+}
+
+async function pump() {
+  if (syncing || !queue.length) return;
+  syncing = true;
+  setSync('saving');
+  const op = queue[0];
+  let res = null, failed = null;
+  try { res = await api(op.action, op.data); } catch (e) { failed = e; }
+  syncing = false;
+  if (failed instanceof LinkError) return;               // showGate already cleared everything
+  if (failed) {
+    // Connection trouble or a busy sheet: try again a few times, slower each time
+    if (['network', 'busy', 'server'].includes(failed.message) && ++op.tries < 4) {
+      setSync('retry');
+      setTimeout(pump, 1500 * op.tries);
+      return;
+    }
+    // The sheet refused it: drop what's waiting and show what the sheet really has
+    queue.length = 0;
+    setSync('hidden');
+    showToast(`${op.label} didn't save. ${ERROR_TEXT[failed.message] || ERROR_TEXT.server}`);
+    reloadFromSheet();
+    return;
+  }
+  queue.shift();
+  if (op.action === 'add' && res.id !== op.data.tempId) remapId(op.data.tempId, res.id);
+  // Take the sheet's copy only when nothing else is waiting, so it can't undo a newer change
+  if (!queue.length) takeServerWins(res.wins);
+  setSync(queue.length ? 'saving' : 'saved');
+  pump();
+}
+
+function setSync(state) {
+  const el = document.getElementById('syncStatus');
+  clearTimeout(syncTimer);
+  el.classList.toggle('retry', state === 'retry');
+  el.hidden = state === 'hidden';
+  el.textContent = { saving: 'Saving…', retry: 'Retrying…', saved: 'All changes saved' }[state] || '';
+  if (state === 'saved') syncTimer = setTimeout(() => { el.hidden = true; }, 2500);
+}
+
+// The sheet gave a new win a different ID than we guessed (someone else added one first)
+function remapId(from, to) {
+  wins.forEach(w => { if (w.id === from) w.id = to; });
+  queue.forEach(op => { if (op.data.id === from) op.data.id = to; });
+  if (selectedWinId === from) selectedWinId = to;
+  if (pinnedIds.delete(from)) pinnedIds.add(to);
+  refreshKeepingDraft();
+}
+
+function takeServerWins(serverWins) {
+  if (JSON.stringify(serverWins) === JSON.stringify(wins)) return;
+  wins = serverWins;
+  refreshKeepingDraft();
+}
+
+async function reloadFromSheet() {
+  try {
+    const res = await api('open');
+    wins = res.wins;
+    refreshKeepingDraft();
+  } catch (e) {}
+}
+
+// Redraw after the sheet changes something, without losing a name someone is typing
+function refreshKeepingDraft() {
+  const input = document.getElementById('signerInput');
+  const keep = input && { id: selectedWinId, signer: input.value, card: pickedCardId, open: cardGridOpen, focused: document.activeElement === input };
+  afterDataChange();
+  const si = document.getElementById('signerInput');
+  if (keep && si && selectedWinId === keep.id) {
+    si.value = keep.signer;
+    pickedCardId = keep.card;
+    cardGridOpen = keep.open;
+    renderCardStep();
+    if (keep.focused) si.focus({ preventScroll: true });
+    updateSaveReady();
+  }
+}
+
+// Find a win again after the list may have been replaced by the sheet's copy
+function findWin(win) {
+  return wins.find(w => w === win) || wins.find(w => w.id === win.id);
+}
+
+// ── Link days and expiry ──────────────────────────────────────────────────
+// "10/30/26", "10/30/2026", "9/4/24" and "Wed Nov 18 2026 00:00:00 GMT-0600" all become
+// a comparable "2026-10-30" style key
+function dayKey(v) {
+  const s = String(v == null ? '' : v).trim();
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/.exec(s);
+  if (m) {
+    const y = m[3].length === 2 ? '20' + m[3] : m[3];
+    return `${y}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+  }
+  if (/[a-z]{3} \d{1,2} \d{4}/i.test(s)) {
+    const d = new Date(s.replace(/\s*\(.*\)$/, ''));
+    if (!isNaN(d)) return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  return '';
+}
+// Is this win dated within the link's days?
+function inLinkDays(w) {
+  const k = dayKey(w.date);
+  return !!link && !!k && k >= dayKey(link.from) && k <= dayKey(link.to);
+}
+function isMultiDay() {
+  return !!link && dayKey(link.from) !== dayKey(link.to);
+}
+function keyToDate(k) {
+  const [y, m, d] = k.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+function keyToMdy(k) {
+  return k ? `${k.slice(5, 7)}/${k.slice(8, 10)}/${k.slice(2, 4)}` : '';
+}
+// "Mon, Nov 16"
+function formatDay(s) {
+  const k = dayKey(s);
+  return k ? keyToDate(k).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : String(s);
+}
+// "Mon 16", for the queue
+function shortDay(s) {
+  const k = dayKey(s);
+  if (!k) return '';
+  const d = keyToDate(k);
+  return `${d.toLocaleDateString(undefined, { weekday: 'short' })} ${d.getDate()}`;
+}
+function linkDaysText() {
+  return isMultiDay() ? `${formatDay(link.from)} – ${formatDay(link.to)}` : formatDay(link.from);
+}
+function formatExpiry(d) {
+  return d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+}
+
+function updateHeader() {
+  document.getElementById('kicker').textContent = link && DECKS[link.deck] ? `Spicy Uno · ${DECKS[link.deck].name}` : 'Spicy Uno';
+  document.getElementById('intro').textContent = link
+    ? `Logging wins from ${linkDaysText()}.` + (link.expires ? ` This link works until ${formatExpiry(link.expires)}.` : '')
+    : 'Who signed which card after each win.';
+}
+
+// Full-page messages when there's no usable link. Clears everything loaded from the sheet.
+const GATES = {
+  none:           ['This page opens from a link', 'Ask for a link to the days you are logging.'],
+  expired:        ['This link has expired', "Links work for 24 hours after they're first opened. Ask for a new one."],
+  'invalid-link': ["This link doesn't work", 'Check that you copied the whole link, or ask for a new one.'],
+  network:        ["Couldn't reach the sheet", 'Check your connection and try again.'],
+};
+function showGate(kind) {
+  const [title, text] = GATES[kind] || GATES.network;
+  queue.length = 0;
+  setSync('hidden');
+  shownKey = null;
+  link = null;
+  wins = [];
+  selectedWinId = null;
+  leaveNewWinMode();
+  hideToast();
+  updateHeader();
+  document.getElementById('fillContent').innerHTML = `
+    <div class="empty-state"><strong>${esc(title)}</strong>${esc(text)}
+      ${kind === 'network' ? '<div style="margin-top:16px"><button type="button" class="btn btn-primary" onclick="location.reload()">Try again</button></div>' : ''}
+    </div>`;
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+const isIncomplete = w => w.signer === '?' || w.cardId === '';
+
+// Value sort: numbers 0-9 first, then specials alphabetically
+function valueSortKey(v) {
+  if (v !== '' && !isNaN(v)) return '0_' + String(parseInt(v)).padStart(3,'0');
+  return '1_' + v.toLowerCase();
+}
+
+function sortedIncomplete() {
+  const inc = wins.filter(w => isIncomplete(w) && inLinkDays(w));
+  const unpinned = inc.filter(w => !pinnedIds.has(w.id));
+  const pinned   = inc.filter(w =>  pinnedIds.has(w.id));
+
+  if (sortMode === 'chrono') {
+    // preserve original data order (by array index)
+    return [...unpinned, ...pinned];
+  }
+  // color/value sort
+  const sortFn = (a, b) => {
+    const cc = a.color.localeCompare(b.color);
+    if (cc !== 0) return cc;
+    return valueSortKey(a.value).localeCompare(valueSortKey(b.value));
+  };
+  return [...unpinned.sort(sortFn), ...pinned.sort(sortFn)];
+}
+
+// Derive color prefix from existing data
+function colorPrefix(color) {
+  const ex = wins.filter(w => w.color === color && w.cardId && w.cardId.includes('_'));
+  return ex.length ? ex[0].cardId[0] : color[0].toUpperCase();
+}
+
+// Derive value code from existing data
+function valueCode(color, value) {
+  const prefix = colorPrefix(color);
+  const ex = wins.find(w => w.color === color && w.value === value && w.cardId && w.cardId.includes('_'));
+  if (ex) return ex.cardId.substring(prefix.length, ex.cardId.indexOf('_'));
+  if (value !== '' && !isNaN(value)) return value;
+  if (value === 'Draw 2')   return 'D';
+  if (value === 'Draw 4')   return 'D';
+  if (value === 'Skip')     return 'S';
+  if (value === 'Reverse')  return 'R';
+  if (value === 'Basic')    return 'B';
+  return value[0].toUpperCase();
+}
+
+function cidBase(color, value) {
+  return `${colorPrefix(color)}${valueCode(color, value)}_`;
+}
+
+// Distinct known cardIds for a card type (that appear in data), sorted by suffix sequence
+function knownCardIds(color, value) {
+  const base = cidBase(color, value);
+  const ids = [...new Set(
+    wins.filter(w => w.color===color && w.value===value && w.cardId && w.cardId.startsWith(base))
+        .map(w => w.cardId)
+  )];
+  return ids.sort((a,b) => SUFFIX_SEQ.indexOf(a.slice(-1)) - SUFFIX_SEQ.indexOf(b.slice(-1)));
+}
+
+// Confirmed signers for a specific physical cardId (excludes '?')
+function signersForCardId(cid) {
+  return wins.filter(w => w.cardId === cid && w.signer && w.signer !== '?')
+             .sort((a,b) => parseInt(a.id) - parseInt(b.id));
+}
+
+function nextSuffix(color, value) {
+  const base = cidBase(color, value);
+  const used = new Set(wins.filter(w => w.cardId && w.cardId.startsWith(base)).map(w => w.cardId.slice(-1)));
+  for (const ch of SUFFIX_SEQ) if (!used.has(ch)) return base + ch;
+  return base + '?';
+}
+
+function allSigners() {
+  return [...new Set(wins.map(w=>w.signer).filter(s=>s&&s!=='?'))].sort();
+}
+
+function setStatus(id, msg, type) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'status-msg' + (type ? ' '+type : '');
+}
+
+// ── New Win helpers ────────────────────────────────────────────────────────
+function nextWinId() {
+  if (!wins.length) return '1';
+  return String(Math.max(...wins.map(w => parseInt(w.id) || 0)) + 1);
+}
+function valueForKey(key, color) {
+  if (color === 'Wild') {
+    if (key === 'd') return 'Draw 4';
+    if (key === 'b') return 'Basic';
+    return null;
+  }
+  if (key >= '0' && key <= '9') return key;
+  if (key === 'd') return 'Draw 2';
+  if (key === 's') return 'Skip';
+  if (key === 'r') return 'Reverse';
+  return null;
+}
+
+function afterDataChange() {
+  renderFillTab();
+}
+
+// ── Posted: wins in this link's days that are filled in ──────────────────
+function postedWins() {
+  return wins.filter(w => inLinkDays(w) && !isIncomplete(w)).reverse();
+}
+// Only the newest win in the deck, and only if it's in this link's days (the sheet enforces this too)
+function canDeleteWin(id) {
+  const last = wins[wins.length - 1];
+  return !!last && last.id === id && inLinkDays(last);
+}
+
+// ── Readable card names ────────────────────────────────────────────────────
+function cardLabel(cid) {
+  const n = SUFFIX_SEQ.indexOf(String(cid).slice(-1)) + 1;
+  return n ? `Card ${n}` : String(cid);
+}
+
+// ── Motion helpers ─────────────────────────────────────────────────────────
+function replay(el, cls) {
+  if (!el) return;
+  el.classList.remove(cls);
+  void el.offsetWidth;   // let the browser notice the class was removed
+  el.classList.add(cls);
+}
+// Animate the detail panel only when it switches to something else, not on refreshes
+function enterPanel(panel, key) {
+  if (key !== shownKey) replay(panel, 'enter');
+  shownKey = key;
+}
+
+// ── Toast, with optional undo ──────────────────────────────────────────────
+let toastHideTimer = null;
+function hideToast() {
+  const t = document.getElementById('toast');
+  clearTimeout(toastTimer);
+  if (t.hidden) return;
+  t.classList.add('leaving');
+  clearTimeout(toastHideTimer);
+  toastHideTimer = setTimeout(() => { t.hidden = true; t.classList.remove('leaving'); }, 150);
+}
+function showToast(msg, undo) {
+  const t = document.getElementById('toast');
+  t.innerHTML = `<span>${esc(msg)}</span>` + (undo ? `<button type="button" class="btn btn-sm">Undo</button>` : '');
+  if (undo) t.querySelector('button').addEventListener('click', () => {
+    hideToast();
+    undo();
+    leaveNewWinMode();
+    afterDataChange();
+  });
+  clearTimeout(toastHideTimer);
+  t.classList.remove('leaving');
+  t.hidden = false;   // if it's already showing, the text just swaps
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, 6000);
+}
+
+// ── Sort & Pin ─────────────────────────────────────────────────────────────
+function setSortMode(mode) {
+  sortMode = mode;
+  renderFillTab();
+}
+
+function togglePin(id) {
+  if (pinnedIds.has(id)) pinnedIds.delete(id);
+  else                   pinnedIds.add(id);
+  // If we just pinned the currently selected item, move selection to first unpinned
+  if (pinnedIds.has(selectedWinId)) {
+    const inc = sortedIncomplete();
+    const firstUnpinned = inc.find(w => !pinnedIds.has(w.id));
+    if (firstUnpinned) selectedWinId = firstUnpinned.id;
+  }
+  renderFillTab();
+}
+
+// Scroll the queues (not the page) so the selected item is visible
+function revealSelectedInList() {
+  document.querySelectorAll('.incomplete-list').forEach(list => {
+    const el = list.querySelector('.inc-item.selected');
+    if (!el) return;
+    const top = el.offsetTop, bottom = top + el.offsetHeight;
+    if (top < list.scrollTop) list.scrollTop = top;
+    else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
+  });
+}
+
+// On phones the detail sits below the queue, so bring it into view after a pick
+function showDetailOnPhone() {
+  if (!NARROW.matches) return;
+  document.getElementById('detailPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+const PIN_ICON = '<svg class="lucide" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>';
+
+// ── Fill Tab ───────────────────────────────────────────────────────────────
+function renderFillTab() {
+  const container = document.getElementById('fillContent');
+  if (!link) return;
+  const inc      = sortedIncomplete();
+  const unpinned = inc.filter(w => !pinnedIds.has(w.id));
+  const posted   = postedWins();
+  const isPostedSel = posted.some(w => w.id === selectedWinId);
+
+  // All non-deferred wins done (and not editing a posted one) → auto-enter new win mode
+  if (!unpinned.length && !inNewWinMode && !isPostedSel) inNewWinMode = true;
+
+  // Nothing listed at all → full-width new win panel
+  if (!inc.length && !posted.length) {
+    container.innerHTML = `<div class="detail-panel" id="detailPanel"></div>`;
+    showNewWinDetail();
+    return;
+  }
+
+  if (!inNewWinMode && !isPostedSel && !inc.find(w => w.id === selectedWinId)) {
+    selectedWinId = unpinned[0]?.id || inc[0]?.id || posted[0]?.id;
+  }
+
+  let sidebar = '';
+  const pinned = inc.filter(w => pinnedIds.has(w.id));
+
+  function renderItem(w, isPostedItem) {
+    const sel      = w.id === selectedWinId && !inNewWinMode ? ' selected' : '';
+    const isPinned = pinnedIds.has(w.id);
+    const pinnedCls = isPinned ? ' pinned' : '';
+    const pinLabel = isPinned ? 'Unpin' : 'Send to bottom';
+    const end = isPostedItem
+      ? `<span class="inc-signer">${esc(w.signer)}</span>`
+      : `<button type="button" class="pin-btn" data-pin="${esc(w.id)}" tabindex="-1" title="${pinLabel} (P)" aria-label="${pinLabel}">${PIN_ICON}</button>`;
+    const flash = w.id === flashId ? ' flash' : '';
+    return `<div class="inc-item${sel}${pinnedCls}${flash}" data-wid="${esc(w.id)}" role="button" tabindex="-1"${sel ? ' aria-current="true"' : ''}>
+      <span class="dot" style="${suitStyle(w.color)}"></span>
+      <span class="win-num">#${esc(w.id)}</span>
+      <span class="inc-name">${esc(w.color)} ${esc(w.value)}${isMultiDay() ? `<span class="inc-day">${esc(shortDay(w.date))}</span>` : ''}</span>
+      ${end}
+    </div>`;
+  }
+
+  unpinned.forEach(w => { sidebar += renderItem(w, false); });
+  if (pinned.length) {
+    sidebar += `<div class="deferred-header">Deferred (${pinned.length})</div>`;
+    pinned.forEach(w => { sidebar += renderItem(w, false); });
+  }
+  if (!inc.length) sidebar = `<div class="list-empty">All caught up. Add a win with + Win.</div>`;
+
+  const postedHtml = posted.length
+    ? posted.map(w => renderItem(w, true)).join('')
+    : `<div class="list-empty">Wins you fill in show up here, so you can fix them.</div>`;
+
+  container.innerHTML = `
+    <div class="fill-layout">
+      <div class="incomplete-sidebar">
+        <div class="sidebar-header">
+          <span>Unposted <span class="sidebar-count">${inc.length}</span></span>
+          <div class="row" style="gap:6px;">
+            <button type="button" class="btn btn-sm" onclick="enterNewWinMode()">+ Win</button>
+            <div class="sort-toggle">
+              <button type="button" class="${sortMode==='color'?'active':''}" onclick="setSortMode('color')">Color</button>
+              <button type="button" class="${sortMode==='chrono'?'active':''}" onclick="setSortMode('chrono')">Date</button>
+            </div>
+          </div>
+        </div>
+        <div class="incomplete-list" id="incList">${sidebar}</div>
+        <div class="sidebar-header lower">
+          <span>Posted <span class="sidebar-count">${posted.length}</span></span>
+        </div>
+        <div class="incomplete-list" id="postedList">${postedHtml}</div>
+      </div>
+      <div class="detail-panel" id="detailPanel"></div>
+    </div>`;
+
+  // Rows: click/Enter/Space opens a win; ↑/↓ moves through both lists; P pins
+  document.querySelectorAll('.incomplete-list .inc-item').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.pin-btn')) return;
+      openWin(el.dataset.wid);
+      if (!usingKeyboard) showDetailOnPhone();
+    });
+    el.addEventListener('keydown', queueKeys);
+  });
+  setRowTabStop();
+
+  document.querySelectorAll('#incList .pin-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      togglePin(btn.dataset.pin);
+    });
+  });
+
+  if (inNewWinMode) {
+    showNewWinDetail();
+  } else {
+    renderDetail();
+  }
+
+  revealSelectedInList();
+  flashId = null;
+}
+
+function selectWin(id) {
+  selectedWinId = id;
+  document.querySelectorAll('.incomplete-list .inc-item').forEach(el => {
+    el.classList.toggle('selected', el.dataset.wid === id);
+    el.toggleAttribute('aria-current', el.dataset.wid === id);
+  });
+  setRowTabStop();
+  renderDetail();
+  revealSelectedInList();
+}
+
+function openWin(id) {
+  const wasNewWin = inNewWinMode;
+  leaveNewWinMode();
+  if (wasNewWin) { selectedWinId = id; renderFillTab(); }
+  else selectWin(id);
+}
+
+// ── Keyboard ───────────────────────────────────────────────────────────────
+function queueRows() { return [...document.querySelectorAll('.incomplete-list .inc-item')]; }
+function queueRow(id) { return queueRows().find(r => r.dataset.wid === id); }
+
+// The queue is one Tab stop: the open win's row (or the first row)
+function setRowTabStop() {
+  const rows = queueRows();
+  const stop = rows.find(r => r.dataset.wid === selectedWinId && !inNewWinMode) || rows[0];
+  rows.forEach(r => { r.tabIndex = r === stop ? 0 : -1; });
+}
+
+function queueKeys(e) {
+  const row = e.currentTarget, id = row.dataset.wid;
+  if (e.target !== row || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    openWin(id);
+    queueRow(id)?.focus();
+  } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const rows = queueRows();
+    const next = rows[rows.indexOf(row) + (e.key === 'ArrowDown' ? 1 : -1)];
+    if (!next) return;
+    openWin(next.dataset.wid);
+    queueRow(next.dataset.wid)?.focus();
+  } else if ((e.key === 'p' || e.key === 'P') && row.querySelector('.pin-btn')) {
+    e.preventDefault();
+    togglePin(id);
+    queueRow(id)?.focus();
+  }
+}
+
+// The card grid is one Tab stop; arrow keys move between cards, Home/End jump to the ends
+function gridKeys(e) {
+  const tiles = [...e.currentTarget.querySelectorAll('.uno-card')];
+  const i = tiles.indexOf(document.activeElement);
+  if (i < 0) return;
+  const cols = tiles.filter(t => t.offsetTop === tiles[0].offsetTop).length || 1;
+  const moves = { ArrowRight: i + 1, ArrowLeft: i - 1, ArrowDown: i + cols, ArrowUp: i - cols, Home: 0, End: tiles.length - 1 };
+  if (!(e.key in moves)) return;
+  e.preventDefault();
+  const to = Math.max(0, Math.min(tiles.length - 1, moves[e.key]));
+  tiles.forEach((t, k) => { t.tabIndex = k === to ? 0 : -1; });
+  tiles[to].focus();
+}
+
+// Where a keyboard user should land in a win: the card grid, or the name box once a card is picked
+function focusStepOne() {
+  if (!usingKeyboard) return;
+  const tile = document.querySelector('#cardGrid .cards-grid .uno-card[tabindex="0"], #cardGrid.cards-grid .uno-card[tabindex="0"]');
+  if (tile && cardGridOpen) { tile.focus(); return; }
+  const si = document.getElementById('signerInput');
+  if (si) si.focus();
+}
+
+// Shortcuts (not while typing): ? opens help; with a win open, / jumps to the name box and
+// F to the first-signer dropdown
+function appKeys(e) {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (e.key === '?') { e.preventDefault(); openHelp(); return; }
+  if (inNewWinMode || !link || document.getElementById('helpDialog').open) return;
+  if (e.key === '/') {
+    const si = document.getElementById('signerInput');
+    if (!si) return;
+    e.preventDefault();
+    si.focus();
+    si.select();
+  } else if (e.key === 'f' || e.key === 'F') {
+    // Card already picked: open the grid first, so the dropdown is there
+    if (!document.getElementById('cardFilter') && document.getElementById('changeCard')) {
+      cardGridOpen = true;
+      renderCardStep('grid');
+    }
+    const sel = document.getElementById('cardFilter');
+    if (sel) { e.preventDefault(); sel.focus(); }
+  }
+}
+
+// ── New Win Mode ───────────────────────────────────────────────────────────
+function enterNewWinMode() {
+  inNewWinMode = true;
+  newWinDraft  = { color: null, value: null };
+  renderFillTab();
+  showDetailOnPhone();
+}
+
+function leaveNewWinMode() {
+  inNewWinMode = false;
+  document.removeEventListener('keydown', nwKeyHandler);
+}
+
+function nwKeyHandler(e) {
+  if (document.getElementById('helpDialog').open) return;
+  const focused = document.activeElement;
+  if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA' || focused.tagName === 'SELECT')) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const key = e.key.toLowerCase();
+  if (!newWinDraft.color) {
+    if (COLOR_KEYS[key]) { e.preventDefault(); nwSelectColor(COLOR_KEYS[key]); }
+  } else if (!newWinDraft.value) {
+    const val = valueForKey(key, newWinDraft.color);
+    if (val) { e.preventDefault(); nwSelectValue(val); }
+  } else if (key === 'enter' && focused?.id !== 'nwAddBtn') {
+    e.preventDefault();
+    commitNewWin();
+  }
+}
+
+function nwSelectColor(color) {
+  newWinDraft.color = color;
+  newWinDraft.value = null;
+  // Update button highlights
+  document.querySelectorAll('.nw-color-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.color === color);
+  });
+  // Re-render value buttons with new color context
+  const vr = document.getElementById('nwValueRow');
+  if (vr) vr.innerHTML = buildValueBtns(color, null);
+  attachValueBtnListeners();
+  document.getElementById('nwValueSect')?.classList.remove('dimmed');
+  document.getElementById('nwAddSect')?.classList.add('dimmed');
+}
+
+function nwSelectValue(value) {
+  newWinDraft.value = value;
+  document.querySelectorAll('.nw-value-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.value === value);
+  });
+  document.getElementById('nwAddSect')?.classList.remove('dimmed');
+  setStatus('nwMsg', '', '');
+  if (CAN_AUTOFOCUS) setTimeout(() => document.getElementById('nwAddBtn')?.focus(), 20);
+}
+
+function buildValueBtns(color, selectedVal) {
+  const style = suitStyle(color || 'Wild');
+  let entries = [];
+  if (color === 'Wild') {
+    entries = [
+      { label: 'D4', value: 'Draw 4' },
+      { label: 'Ba', value: 'Basic' },
+    ];
+  } else {
+    for (let n = 0; n <= 9; n++) entries.push({ label: String(n), value: String(n) });
+    entries.push({ label: 'D2', value: 'Draw 2' });
+    entries.push({ label: 'Sk', value: 'Skip' });
+    entries.push({ label: 'Rv', value: 'Reverse' });
+  }
+  return entries.map(({ label, value }) => {
+    const active = selectedVal === value ? ' active' : '';
+    return `<button type="button" class="key-btn suit nw-value-btn${active}" style="${style}" data-value="${esc(value)}" title="${esc(value)}"><span class="kh">${esc(label)}</span></button>`;
+  }).join('');
+}
+
+function attachValueBtnListeners() {
+  document.querySelectorAll('.nw-value-btn').forEach(btn => {
+    btn.addEventListener('click', () => nwSelectValue(btn.dataset.value));
+  });
+}
+
+function showNewWinDetail() {
+  const panel = document.getElementById('detailPanel');
+  if (!panel) return;
+  const draft = newWinDraft;
+
+  const colorBtns = Object.entries(COLOR_KEYS).map(([key, color]) => {
+    const active = draft.color === color ? ' active' : '';
+    return `<button type="button" class="key-btn suit nw-color-btn${active}" style="${suitStyle(color)}" data-color="${esc(color)}">
+      <span class="kh">${esc(key.toUpperCase())}</span><span class="kn">${esc(color)}</span>
+    </button>`;
+  }).join('');
+
+  const valueDimmed = !draft.color ? ' dimmed' : '';
+  const addDimmed   = !draft.value ? ' dimmed' : '';
+  // Start on the link's first day; after that, keep the last day used
+  const fromK = dayKey(link.from), toK = dayKey(link.to);
+  if (!newWinDay || newWinDay < fromK || newWinDay > toK) newWinDay = fromK;
+  const keyHint = CAN_AUTOFOCUS ? '(press a key or click)' : '(tap one)';
+
+  enterPanel(panel, 'new');
+  panel.innerHTML = `
+    <div class="new-win-title">
+      <h2>New win</h2>
+      <span class="sub">#${esc(nextWinId())}</span>
+    </div>
+
+    <div class="nw-section">
+      <p class="section-label">Color <span class="hint">${keyHint}</span></p>
+      <div class="key-btn-row">${colorBtns}</div>
+    </div>
+
+    <div class="nw-section${valueDimmed}" id="nwValueSect">
+      <p class="section-label">Value</p>
+      <div class="key-btn-row" id="nwValueRow">${buildValueBtns(draft.color || Object.values(COLOR_KEYS)[0], draft.value)}</div>
+    </div>
+
+    <div class="nw-section${addDimmed}" id="nwAddSect">
+      <div class="row">
+        ${isMultiDay()
+          ? `<input id="nwDay" type="date" aria-label="Day" min="${esc(dayKey(link.from))}" max="${esc(dayKey(link.to))}" value="${esc(newWinDay)}" onchange="newWinDay = this.value">`
+          : ''}
+        <button type="button" class="btn btn-primary" id="nwAddBtn" onclick="commitNewWin()">Add win</button>
+        ${isMultiDay() ? '' : `<span class="status-msg">Dated ${esc(formatDay(link.from))}, from your link</span>`}
+      </div>
+    </div>
+    <div class="status-msg" id="nwMsg" role="alert"></div>`;
+
+  document.querySelectorAll('.nw-color-btn').forEach(btn => {
+    btn.addEventListener('click', () => nwSelectColor(btn.dataset.color));
+  });
+  attachValueBtnListeners();
+  document.removeEventListener('keydown', nwKeyHandler);
+  document.addEventListener('keydown', nwKeyHandler);
+}
+
+function commitNewWin() {
+  if (!newWinDraft.color) { setStatus('nwMsg', 'Pick the color of the winning card first.', 'err'); return; }
+  if (!newWinDraft.value) { setStatus('nwMsg', 'Pick the value of the winning card first.', 'err'); return; }
+  const { color, value } = newWinDraft;
+  const day = isMultiDay() ? newWinDay : dayKey(link.from);
+  if (!day || day < dayKey(link.from) || day > dayKey(link.to)) {
+    setStatus('nwMsg', `Pick a day from ${linkDaysText()}.`, 'err');
+    return;
+  }
+  const date = keyToMdy(day);
+  // Our best guess at the ID; the sheet confirms it (and remapId fixes it if someone beat us)
+  const id  = nextWinId();
+  const win = { id, color, value, signer: '?', date, cardId: '' };
+  wins.push(win);
+  enqueue('add', { color, value, date, tempId: id }, `Win #${id}`);
+  leaveNewWinMode();
+  newWinDraft   = { color: null, value: null };
+  selectedWinId = id;
+  flashId       = id;
+  showToast(`Added #${id}`, () => {
+    const w = findWin(win);
+    if (!w || !canDeleteWin(w.id)) { showToast("Can't undo: a newer win was added after it."); return; }
+    wins.splice(wins.indexOf(w), 1);
+    enqueue('delete', { id: w.id }, `Removing #${w.id}`);
+    selectedWinId = null;
+  });
+  afterDataChange();
+  focusStepOne();
+}
+
+
+function renderDetail() {
+  const panel = document.getElementById('detailPanel');
+  if (!panel) return;
+  const win = wins.find(w => w.id === selectedWinId);
+  if (!win) return;
+
+  const editing = !isIncomplete(win);
+  enterPanel(panel, 'win:' + win.id);
+  if (win.id !== filterWinId) { cardFilter = ''; filterWinId = win.id; }
+  pickedCardId  = win.cardId;
+  // A win that already has a card opens with just that card showing
+  cardGridOpen  = !win.cardId;
+  const style   = suitStyle(win.color);
+  const cardIds = knownCardIds(win.color, win.value);
+  const typeName = `${win.color} ${win.value}`;
+
+  // Sort cards by descending signature count
+  const cards = cardIds.map(cid => {
+    const sigWins = signersForCardId(cid);
+    return { cid, sigWins };
+  }).sort((a,b) => b.sigWins.length - a.sigWins.length);
+
+  const tiles = { order: [], html: {}, first: {}, newCid: '', win };
+  cards.forEach(({cid, sigWins}) => {
+    const firstSigner = sigWins.length ? sigWins[0].signer : null;
+    // Aggregate by name, alpha sorted
+    const byName = {};
+    sigWins.forEach(w => { byName[w.signer] = (byName[w.signer]||0)+1; });
+    const names = Object.keys(byName).sort();
+
+    const MAX_SHOW = 15;
+    // One row per signer: star (first to sign) | name | ×count, so names line up
+    let sigHTML = names.slice(0, MAX_SHOW).map(name => `
+      <div class="sn">
+        <span class="star"${name===firstSigner?' title="First to sign"':''}>${name===firstSigner?'★':''}</span>
+        <span class="name">${esc(name)}</span>
+        <span class="mult">${byName[name]>1?`×${byName[name]}`:''}</span>
+      </div>`).join('');
+    if (names.length > MAX_SHOW) sigHTML += `<div class="sn more"><span class="star"></span><span class="name">+${names.length-MAX_SHOW} more</span><span class="mult"></span></div>`;
+
+    tiles.order.push(cid);
+    tiles.first[cid] = firstSigner;
+    tiles.html[cid] = `
+      <button type="button" class="uno-card suit" style="${style}" data-cid="${esc(cid)}" title="${esc(typeName)} · ${esc(cardLabel(cid))}">
+        <div class="card-head">
+          <div class="card-meta"><span class="card-num">${esc(cardLabel(cid))}</span><span>${sigWins.length} total</span></div>
+          <div class="cval">${esc(win.value)}</div>
+        </div>
+        <div class="card-body">${sigHTML}</div>
+      </button>`;
+  });
+
+  // Blank tile for a card nobody has signed yet
+  const newCid = nextSuffix(win.color, win.value);
+  tiles.newCid = newCid;
+  tiles.order.push(newCid);
+  tiles.html[newCid] = `
+    <button type="button" class="uno-card new-card suit" style="${style}" data-cid="${esc(newCid)}" title="${esc(typeName)} · ${esc(cardLabel(newCid))} (new)">
+      <div class="card-head">
+        <div class="card-meta"><span class="card-num">${esc(cardLabel(newCid))}</span><span>New</span></div>
+        <div class="cval">+</div>
+      </div>
+      <div class="card-body"><div class="new-label">Not signed yet</div></div>
+    </button>`;
+
+  const inc    = sortedIncomplete();
+  const idx    = inc.findIndex(w => w.id === selectedWinId);
+  const prevId = idx > 0            ? inc[idx-1].id : null;
+  const nextId = idx > -1 && idx < inc.length-1 ? inc[idx+1].id : null;
+
+  // Chosen by relevance (rank 0 = most), shown A–Z; fitChips trims to two rows
+  const chips = suggestedSigners(win).map((name, rank) => ({ name, rank }))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })).map(({ name, rank }) =>
+    `<button type="button" class="chip" data-name="${esc(name)}" data-rank="${rank}">${esc(name)}</button>`
+  ).join('');
+
+  const extraActions = [
+    editing ? `<button type="button" class="btn btn-ghost" onclick="moveBackToUnposted()">Move back to unposted</button>` : '',
+    canDeleteWin(win.id) ? `<button type="button" class="btn btn-ghost btn-danger" onclick="deleteWin()">Delete win</button>` : '',
+  ].join('');
+
+  panel.innerHTML = `
+    <div class="detail-title suit" style="${style}">
+      <h2>${esc(typeName)}</h2>
+      <span class="sub">Win #${esc(win.id)} · ${esc(win.date)}${editing ? ' · posted' : ''}</span>
+    </div>
+
+    <div id="cardStep"></div>
+
+    <div class="fill-form">
+      <div>
+        <label class="section-label" for="signerInput" style="display:block"><span class="step-num">2</span>Who signed it?</label>
+        <div class="autocomplete-wrapper">
+          <input id="signerInput" type="text"
+            value="${esc(win.signer==='?'?'':win.signer)}"
+            placeholder="${CAN_AUTOFOCUS ? 'Name…  (press / to jump here)' : 'Name…'}" autocomplete="off" autocapitalize="words"
+            oninput="onSignerInput()" onkeydown="onSignerKeydown(event)">
+          <div class="autocomplete-list" id="acList" role="listbox"></div>
+        </div>
+        ${chips ? `<div class="chips" id="signerChips">${chips}</div>` : ''}
+      </div>
+      <div class="save-row">
+        <span class="step-num" aria-hidden="true">3</span>
+        <button type="button" class="btn btn-primary" id="saveBtn" onclick="saveEntry()">${editing ? 'Save changes' : 'Save'}</button>
+        <span class="spacer"></span>
+        ${extraActions}
+      </div>
+      <div class="status-msg" id="formMsg" role="alert"></div>
+    </div>
+
+    <div class="nav-row">
+      ${prevId ? `<button type="button" class="btn btn-ghost" data-goto="${esc(prevId)}">← Prev</button>` : ''}
+      ${nextId ? `<button type="button" class="btn btn-ghost" data-goto="${esc(nextId)}">Next →</button>` : ''}
+    </div>
+  `;
+
+  cardTiles = tiles;
+  renderCardStep();
+  fitChips();
+  document.querySelectorAll('#signerChips .chip').forEach(el => {
+    el.addEventListener('click', () => pickSigner(el.dataset.name));
+  });
+  document.querySelectorAll('.nav-row .btn').forEach(el => {
+    el.addEventListener('click', () => selectWin(el.dataset.goto));
+  });
+  updateSaveReady();
+}
+
+// Step 1 on its own, so picking a card never touches a name being typed
+// motion: 'grid' ripples the tiles in, 'pop' pops the picked card; nothing on refreshes
+function renderCardStep(motion) {
+  const box = document.getElementById('cardStep');
+  if (!box) return;
+  const t = cardTiles;
+  const mark = cid => (t.html[cid] || '').replace('class="uno-card', 'class="uno-card sel-card');
+  if (cardGridOpen || !pickedCardId) {
+    // First signers of this card type, most cards first
+    const counts = {};
+    Object.values(t.first).forEach(n => { if (n) counts[n] = (counts[n] || 0) + 1; });
+    const firsts = Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b));
+    const canFilter = firsts.length > 1;
+    if (!canFilter) cardFilter = '';
+    const shown = t.order.filter(cid => !cardFilter || cid === t.newCid || cid === pickedCardId || t.first[cid] === cardFilter);
+    box.innerHTML = `
+      <div class="step-head">
+        <p class="section-label"><span class="step-num">1</span>Pick the card that was signed <span class="hint">(or a new one)</span></p>
+        ${canFilter ? `<select class="filter-select${cardFilter ? ' is-on' : ''}" id="cardFilter" aria-label="Show cards first signed by" title="Show cards first signed by (F)">
+          <option value="">First signer: all (${t.order.length - 1})</option>
+          ${firsts.map(n => `<option value="${esc(n)}"${n === cardFilter ? ' selected' : ''}>★ ${esc(n)} (${counts[n]})</option>`).join('')}
+        </select>` : ''}
+      </div>
+      <div class="cards-grid" id="cardGrid">${shown.map(cid => cid === pickedCardId ? mark(cid) : t.html[cid]).join('')}</div>`;
+    box.querySelector('#cardFilter')?.addEventListener('change', e => {
+      cardFilter = e.target.value;
+      renderCardStep('grid');
+      box.querySelector('#cardFilter')?.focus();   // redrawn: keep arrow keys working
+    });
+    const tileEls = [...box.querySelectorAll('.uno-card')];
+    const stop = Math.max(0, tileEls.findIndex(el => el.dataset.cid === pickedCardId));
+    tileEls.forEach((el, i) => {
+      el.tabIndex = i === stop ? 0 : -1;
+      el.addEventListener('click', () => pickCard(el.dataset.cid));
+      if (motion === 'grid') el.style.animationDelay = Math.min(i, 12) * 15 + 'ms';
+    });
+    box.querySelector('.cards-grid').addEventListener('keydown', gridKeys);
+    if (motion === 'grid') box.querySelector('.cards-grid').classList.add('enter');
+    return;
+  }
+  // A card from the sheet that doesn't fit the usual ID pattern still gets a plain tile
+  const tile = t.html[pickedCardId] ? mark(pickedCardId) : `
+    <button type="button" class="uno-card sel-card suit" style="${suitStyle(t.win.color)}" data-cid="${esc(pickedCardId)}">
+      <div class="card-head"><div class="card-meta"><span class="card-num">${esc(cardLabel(pickedCardId))}</span></div>
+      <div class="cval">${esc(t.win.value)}</div></div><div class="card-body"></div>
+    </button>`;
+  box.innerHTML = `
+    <p class="section-label"><span class="step-num">1</span>Card</p>
+    <div class="picked-row">
+      <div id="cardGrid">${tile}</div>
+      <button type="button" class="btn btn-sm" id="changeCard">Change card</button>
+    </div>`;
+  if (motion === 'pop') box.querySelector('.picked-row').classList.add('enter');
+  const open = () => {
+    cardGridOpen = true;
+    renderCardStep('grid');
+    if (usingKeyboard) document.querySelector('#cardGrid .uno-card[tabindex="0"]')?.focus();
+  };
+  box.querySelector('.uno-card').addEventListener('click', open);
+  box.querySelector('#changeCard').addEventListener('click', open);
+}
+
+// Names to offer as one-tap chips: signers of this card type first, then recent signers
+function suggestedSigners(win) {
+  const out = [];
+  const add = s => { if (s && s !== '?' && !out.includes(s)) out.push(s); };
+  [...wins].reverse().filter(w => w.color === win.color && w.value === win.value).forEach(w => add(w.signer));
+  [...wins].reverse().forEach(w => add(w.signer));
+  return out.slice(0, 16);
+}
+
+// Keep the chips to two rows: drop the least relevant names until they fit
+function fitChips() {
+  const box = document.getElementById('signerChips');
+  if (!box) return;
+  const rows = () => new Set([...box.children].map(c => c.offsetTop)).size;
+  const leastFirst = [...box.children].sort((a, b) => b.dataset.rank - a.dataset.rank);
+  for (const chip of leastFirst) {
+    if (rows() <= 2) break;
+    chip.remove();
+  }
+}
+
+// Dim the Save button and highlight the matching chip until both steps are done
+function updateSaveReady() {
+  const name = (document.getElementById('signerInput')?.value || '').trim();
+  document.getElementById('saveBtn')?.classList.toggle('is-waiting', !pickedCardId || !name);
+  document.querySelectorAll('#signerChips .chip').forEach(c => c.classList.toggle('active', c.dataset.name === name));
+}
+
+// Picking a card shrinks step 1 to that card, so it stays in view next to the name box
+function pickCard(cid) {
+  pickedCardId = cid;
+  cardGridOpen = false;
+  renderCardStep('pop');
+  setStatus('formMsg', '', '');
+  updateSaveReady();
+  // After a long grid collapses, the card or the name box can end up off screen.
+  // If either is, scroll so the card sits at the top with the name box under it.
+  const step = document.getElementById('cardStep');
+  const si = document.getElementById('signerInput');
+  if (step && si && (step.getBoundingClientRect().top < 0 || si.getBoundingClientRect().bottom > window.innerHeight)) {
+    step.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  if (usingKeyboard) {
+    (si && !si.value.trim() ? si : document.getElementById('saveBtn'))?.focus({ preventScroll: true });
+  } else if (si && CAN_AUTOFOCUS && !si.value) {
+    si.focus({ preventScroll: true });
+  }
+}
+
+// Change who signed a win, on the page now and in the sheet in the background
+function setSigner(win, signer, cardId) {
+  win.signer = signer;
+  win.cardId = cardId;
+  win.date   = keyToMdy(dayKey(win.date)) || win.date;
+  enqueue('save', { id: win.id, signer, cardId }, `#${win.id}`);
+}
+
+function saveEntry() {
+  const signer = (document.getElementById('signerInput').value||'').trim();
+  if (!pickedCardId) { setStatus('formMsg', 'Step 1: tap the card that was signed, or New card.', 'err'); return; }
+  if (!signer)       { setStatus('formMsg', 'Step 2: enter who signed it.', 'err'); return; }
+  const win = wins.find(w => w.id === selectedWinId);
+  if (!win) return;
+  const before  = { signer: win.signer, cardId: win.cardId };
+  const editing = !isIncomplete(win);
+  setSigner(win, signer, pickedCardId);
+  flashId = win.id;
+  showToast(`Saved #${win.id}`, () => {
+    const w = findWin(win);
+    if (!w) return;
+    setSigner(w, before.signer, before.cardId);
+    selectedWinId = w.id;
+  });
+  // New entries advance to the next unposted win; edits stay put
+  if (!editing) {
+    const unpinnedInc = sortedIncomplete().filter(w => !pinnedIds.has(w.id));
+    selectedWinId = unpinnedInc.length ? unpinnedInc[0].id : null;
+  }
+  afterDataChange();
+  if (!editing) showDetailOnPhone();
+  focusStepOne();
+}
+
+function moveBackToUnposted() {
+  const win = wins.find(w => w.id === selectedWinId);
+  if (!win) return;
+  const before = { signer: win.signer, cardId: win.cardId };
+  setSigner(win, '?', '');
+  showToast(`Moved #${win.id} back to unposted`, () => {
+    const w = findWin(win);
+    if (!w) return;
+    setSigner(w, before.signer, before.cardId);
+    selectedWinId = w.id;
+  });
+  afterDataChange();
+}
+
+function deleteWin() {
+  if (!canDeleteWin(selectedWinId)) return;
+  const removed = wins.find(w => w.id === selectedWinId);
+  wins.splice(wins.indexOf(removed), 1);
+  enqueue('delete', { id: removed.id }, `Deleting #${removed.id}`);
+  selectedWinId = null;
+  // Undo adds it back (same ID, since it was the newest), then restores who signed
+  showToast(`Deleted #${removed.id}`, () => {
+    const id = nextWinId();
+    const win = Object.assign({}, removed, { id, signer: '?', cardId: '' });
+    wins.push(win);
+    enqueue('add', { color: removed.color, value: removed.value, date: removed.date, tempId: id }, `Win #${id}`);
+    if (!isIncomplete(removed)) setSigner(win, removed.signer, removed.cardId);
+    selectedWinId = id;
+  });
+  afterDataChange();
+}
+
+// ── Autocomplete ───────────────────────────────────────────────────────────
+function onSignerInput() {
+  const val = (document.getElementById('signerInput').value||'').toLowerCase();
+  const list = document.getElementById('acList');
+  acHl = -1;
+  setStatus('formMsg', '', '');
+  updateSaveReady();
+  if (!val) { list.innerHTML=''; return; }
+  const matches = allSigners().filter(s => s.toLowerCase().startsWith(val));
+  list.innerHTML = matches.map(s => `<div role="option">${esc(s)}</div>`).join('');
+  list.querySelectorAll('div').forEach(d => {
+    // mousedown (not click) so the input keeps focus
+    d.addEventListener('mousedown', e => { e.preventDefault(); pickSigner(d.textContent); });
+  });
+}
+
+function onSignerKeydown(e) {
+  const list  = document.getElementById('acList');
+  const items = [...list.querySelectorAll('div')];
+  if ((e.key === 'Tab' && items.length) || e.key === 'ArrowDown') {
+    e.preventDefault();
+    acHl = Math.min(acHl+1, items.length-1);
+    items.forEach((el,i) => el.classList.toggle('hl', i===acHl));
+    if (items[acHl]) document.getElementById('signerInput').value = items[acHl].textContent;
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    acHl = Math.max(acHl-1, 0);
+    items.forEach((el,i) => el.classList.toggle('hl', i===acHl));
+    if (items[acHl]) document.getElementById('signerInput').value = items[acHl].textContent;
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (acHl >= 0 && items[acHl]) pickSigner(items[acHl].textContent);
+    else if (items.length === 1)  pickSigner(items[0].textContent);
+    else if (!items.length)       saveEntry();
+  } else if (e.key === 'Escape') {
+    list.innerHTML = '';
+  }
+}
+
+function pickSigner(name) {
+  document.getElementById('signerInput').value = name;
+  document.getElementById('acList').innerHTML = '';
+  acHl = -1;
+  setStatus('formMsg', '', '');
+  updateSaveReady();
+}
+
+// ── Help ───────────────────────────────────────────────────────────────────
+// Devices with a mouse or trackpad almost always have a keyboard too
+const HAS_KEYBOARD = matchMedia('(hover: hover) and (pointer: fine)').matches;
+const X_ICON = '<svg class="lucide" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+
+function openHelp() {
+  const dlg = document.getElementById('helpDialog');
+  if (dlg.open) return;
+  const linkLine = link
+    ? `<p>This link is for <strong>${esc(linkDaysText())}</strong>${link.expires ? ` and works until <strong>${esc(formatExpiry(link.expires))}</strong>` : ''}.</p>`
+    : '<p>This page opens from a share link for the days you are logging.</p>';
+  const keys = HAS_KEYBOARD ? `
+    <h3>Keyboard shortcuts</h3>
+    <table class="keys"><tbody>
+      <tr><td><kbd>↑</kbd> <kbd>↓</kbd> in the list</td><td>Move between wins</td></tr>
+      <tr><td>Arrow keys in the cards</td><td>Move between cards; <kbd>Home</kbd> / <kbd>End</kbd> jump to the ends</td></tr>
+      <tr><td><kbd>Enter</kbd></td><td>Open a win, pick a card, or save</td></tr>
+      <tr><td><kbd>F</kbd></td><td>First-signer dropdown</td></tr>
+      <tr><td><kbd>/</kbd></td><td>Jump to the name box</td></tr>
+      <tr><td><kbd>↓</kbd> or <kbd>Tab</kbd> in the name box</td><td>Step through matching names</td></tr>
+      <tr><td><kbd>P</kbd> on a win</td><td>Send it to the bottom (or back)</td></tr>
+      <tr><td>New win</td><td>Press the color's letter, then the value (<kbd>0</kbd>–<kbd>9</kbd>, <kbd>D</kbd> draw, <kbd>S</kbd> skip, <kbd>R</kbd> reverse), then <kbd>Enter</kbd></td></tr>
+      <tr><td><kbd>?</kbd> / <kbd>Esc</kbd></td><td>Open / close this help</td></tr>
+    </tbody></table>` : '';
+  document.getElementById('helpBody').innerHTML = `
+    <div class="help-head">
+      <h2 id="helpTitle">How logging works</h2>
+      <button type="button" class="btn btn-sm help-close" id="helpClose" aria-label="Close">${X_ICON}</button>
+    </div>
+    ${linkLine}
+    <h3>Each win</h3>
+    <ol>
+      <li><strong>Pick a win</strong> from <em>Unposted</em>.</li>
+      <li><strong>Tap the card that was signed.</strong> The ★ marks who signed it first; use the
+        <em>First signer</em> dropdown to narrow a long list. Never signed before? Tap <em>New card</em>.</li>
+      <li><strong>Type who signed it</strong> or tap a name, then <strong>Save</strong>. The next win opens.</li>
+    </ol>
+    <h3>Good to know</h3>
+    <ul>
+      <li>Missing a win? <strong>+ Win</strong> adds one.</li>
+      <li>Made a mistake? Hit <strong>Undo</strong> right after, or open the win under <em>Posted</em> to fix it.</li>
+      <li>Changes save to the sheet in the background. Wait for <em>All changes saved</em> before closing the page.</li>
+    </ul>
+    ${keys}`;
+  document.getElementById('helpClose').addEventListener('click', () => dlg.close());
+  dlg.showModal();
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+(function init() {
+  document.addEventListener('keydown', e => { if (e.key === 'Tab' || e.key.startsWith('Arrow') || e.key === 'Enter' || e.key === ' ' || e.key === '/') usingKeyboard = true; }, true);
+  document.addEventListener('pointerdown', () => { usingKeyboard = false; }, true);
+  document.addEventListener('keydown', appKeys);
+  document.getElementById('helpBtn').addEventListener('click', openHelp);
+  // Click outside the box closes it (Esc is built in)
+  document.getElementById('helpDialog').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+  linkCode = readCode();
+  if (!linkCode) { showGate('none'); return; }
+  document.getElementById('fillContent').innerHTML = '<div class="empty-state"><strong>Opening your link…</strong></div>';
+  api('open')
+    .then(res => { wins = res.wins; afterDataChange(); })
+    .catch(e => { if (!(e instanceof LinkError)) showGate('network'); });
+  // Close the page's copy of the wins as soon as the link runs out
+  setInterval(() => { if (link?.expires && Date.now() > link.expires) showGate('expired'); }, 30000);
+  // A different link pasted into the same tab
+  window.addEventListener('hashchange', () => location.reload());
+  // Changes still on their way to the sheet would be lost
+  window.addEventListener('beforeunload', e => {
+    if (queue.length || syncing) { e.preventDefault(); e.returnValue = ''; }
+  });
+})();
+</script>
+</body>
+</html>
