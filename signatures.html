@@ -1144,7 +1144,7 @@ function showNewWinDetail() {
     <div class="nw-section${addDimmed}" id="nwAddSect">
       <div class="row">
         ${isMultiDay()
-          ? `<input id="nwDay" type="date" aria-label="Day" min="${esc(dayKey(link.from))}" max="${esc(dayKey(link.to))}" value="${esc(newWinDay)}" onchange="newWinDay = this.value">`
+          ? `<input id="nwDay" type="date" aria-label="Day" min="${esc(dayKey(link.from))}" max="${esc(dayKey(link.to))}" value="${esc(newWinDay)}" onchange="setNewWinDay(this.value)">`
           : ''}
         <button type="button" class="btn btn-primary" id="nwAddBtn" onclick="commitNewWin()">Add win</button>
         ${isMultiDay() ? '' : `<span class="status-msg">Dated ${esc(formatDay(link.from))}, from your link</span>`}
@@ -1160,6 +1160,14 @@ function showNewWinDetail() {
   document.addEventListener('keydown', nwKeyHandler);
 }
 
+// Remember the new-win day per link in this browser, so a refresh keeps it
+function dayStoreKey() { return 'spicyUnoDay_' + linkCode; }
+function setNewWinDay(k) {
+  newWinDay = k;
+  if (!link || k < dayKey(link.from) || k > dayKey(link.to)) return;   // only keep a day the link covers
+  try { localStorage.setItem(dayStoreKey(), k); } catch (e) {}
+}
+
 function commitNewWin() {
   if (!newWinDraft.color) { setStatus('nwMsg', 'Pick the color of the winning card first.', 'err'); return; }
   if (!newWinDraft.value) { setStatus('nwMsg', 'Pick the value of the winning card first.', 'err'); return; }
@@ -1169,6 +1177,7 @@ function commitNewWin() {
     setStatus('nwMsg', `Pick a day from ${linkDaysText()}.`, 'err');
     return;
   }
+  if (isMultiDay()) setNewWinDay(day);
   const date = keyToMdy(day);
   // Our best guess at the ID; the sheet confirms it (and remapId fixes it if someone beat us)
   const id  = nextWinId();
@@ -1603,6 +1612,7 @@ function openHelp() {
   document.getElementById('helpDialog').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });
   linkCode = readCode();
   if (!linkCode) { showGate('none'); return; }
+  try { newWinDay = localStorage.getItem(dayStoreKey()) || ''; } catch (e) {}
   document.getElementById('fillContent').innerHTML = '<div class="empty-state"><strong>Opening your link…</strong></div>';
   api('open')
     .then(res => { wins = res.wins; afterDataChange(); })
