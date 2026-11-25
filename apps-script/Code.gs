@@ -11,14 +11,22 @@
 //
 // Anyone can call the web app URL, but every request needs a code from the Links tab
 // that hasn't expired, and a code can only change wins dated within its own days.
+// Audit links (stewbs.com/audit) are the exception: they can fix any win in their deck.
 
 const SITE_URL = 'https://stewbs.com/signatures#';
+const AUDIT_URL = 'https://stewbs.com/audit#';
 const LINKS_TAB = 'Links';
-// Columns A–H. "To" is last so links made before ranges existed still read correctly
-// (an empty To means a one-day link).
-const LINK_HEADERS = ['Code', 'Deck', 'From', 'Created', 'First opened', 'Expires', 'Note', 'To'];
+const AUDIT_TAB = 'Audit';
+// Columns A–I. "To" and "Kind" come last so older links still read correctly
+// (an empty To means a one-day link; an empty Kind means a normal logging link).
+const LINK_HEADERS = ['Code', 'Deck', 'From', 'Created', 'First opened', 'Expires', 'Note', 'To', 'Kind'];
 const WIN_HEADERS = ['ID', 'Color', 'Value', 'Signer', 'Date', 'Card ID'];
+// One row per approved card. Fingerprint is the card's signatures when it was approved,
+// so the audit page can tell when a card changed afterwards. Color and value are part of
+// the key because a mislogged win can share a card ID with a card of another value.
+const AUDIT_HEADERS = ['Deck', 'Color', 'Value', 'Card ID', 'Status', 'Fingerprint', 'Reviewed'];
 const LINK_HOURS = 24;     // a link works for this long after it's first opened
+const AUDIT_HOURS = 168;   // an audit link works for a week after it's first opened
 const UNOPENED_DAYS = 14;  // a link nobody opens stops working after this
 const MAX_PER_DAY_LINKS = 31;
 const MAX_NAME = 40;
@@ -57,9 +65,12 @@ function doPost(e) {
   try {
     let req;
     try { req = JSON.parse(e.postData.contents); } catch (err) { throw new ApiError('bad-request'); }
-    const handler = Object.prototype.hasOwnProperty.call(ACTIONS, req.action) ? ACTIONS[req.action] : null;
+    // Audit links only use the audit actions, and logging links only the others
+    const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+    const kind = has(AUDIT_ACTIONS, req.action) ? 'audit' : '';
+    const handler = kind ? AUDIT_ACTIONS[req.action] : has(ACTIONS, req.action) ? ACTIONS[req.action] : null;
     if (!handler) throw new ApiError('bad-request');
-    const link = checkLink(req.code, req.action === 'open');
+    const link = checkLink(req.code, req.action === 'open' || req.action === 'auditOpen', kind);
     return json(Object.assign({ ok: true }, handler(link, req)));
   } catch (err) {
     if (err instanceof ApiError) return json({ ok: false, error: err.code });
@@ -155,6 +166,123 @@ const ACTIONS = {
   },
 };
 
+// ── Audit actions ──────────────────────────────────────────────────────────
+
+const AUDIT_ACTIONS = {
+  // The deck's whole history, plus which cards have been approved
+  auditOpen(link) {
+    return auditInfo(link, readWins(link.deck));
+  },
+
+  // Save one color and value's fixes and approvals, all at once.
+  // ops: { op: 'edit', id, before, signer, date, cardId } | { op: 'add', signer, date, cardId }
+  //    | { op: 'delete', id, before }. `before` is the win as the page saw it; if the sheet
+  //    has changed since (someone fixed it from a logging link), nothing is saved.
+  // approve: every card ID of this color and value that's approved.
+  auditCommit(link, req) {
+    const deck = DECKS[link.deck];
+    const color = String(req.color || '');
+    const value = String(req.value || '');
+    if (deck.colors.indexOf(color) === -1) throw new ApiError('bad-request');
+    if ((color === 'Wild' ? WILD_VALUES : VALUES).indexOf(value) === -1) throw new ApiError('bad-request');
+    const ops = Array.isArray(req.ops) ? req.ops : [];
+    const approve = Array.isArray(req.approve) ? req.approve.map(String) : [];
+    if (ops.length > 2000 || approve.length > 2000) throw new ApiError('bad-request');
+
+    const sheet = deckSheet(link.deck);
+    let wins = readWins(link.deck);
+    const seen = {};
+    const edits = [], adds = [], deletes = [];
+    // Check everything before writing anything
+    ops.forEach(op => {
+      op = op || {};
+      let win = null;
+      if (op.op === 'edit' || op.op === 'delete') {
+        const id = String(op.id);
+        if (seen[id]) throw new ApiError('bad-request');
+        seen[id] = true;
+        win = wins.find(w => w.id === id);
+        if (!win) throw new ApiError('conflict');
+        if (win.color !== color || win.value !== value) throw new ApiError('bad-request');
+        if (!sameWin(win, op.before)) throw new ApiError('conflict');
+      }
+      if (op.op === 'delete') { deletes.push(win); return; }
+      if (op.op !== 'edit' && op.op !== 'add') throw new ApiError('bad-request');
+      const signer = cleanText(op.signer, MAX_NAME);
+      const cardId = cleanText(op.cardId, 16);
+      const key = dayKey(op.date);
+      if (!signer || signer === '?' || !validCardId(cardId) || !key) throw new ApiError('bad-request');
+      const row = [asText(signer), keyToMdy(key), asText(cardId)];
+      if (win) edits.push({ win: win, row: row });
+      else adds.push(row);
+    });
+
+    // Edits in place, then new wins at the bottom, then deletes from the bottom up
+    // (so the row numbers we read are still right)
+    edits.forEach(e => sheet.getRange(e.win.row, 4, 1, 3).setNumberFormat('@').setValues([e.row]));
+    if (adds.length) {
+      let id = wins.reduce((max, w) => Math.max(max, Number(w.id)), 0);
+      const row = Math.max(sheet.getLastRow(), 1) + 1;
+      sheet.getRange(row, 1, adds.length, 6).setNumberFormat('@')
+        .setValues(adds.map(r => [String(++id), color, value, r[0], r[1], r[2]]));
+    }
+    deletes.sort((a, b) => b.row - a.row).forEach(w => sheet.deleteRow(w.row));
+    wins = readWins(link.deck);
+
+    // This color and value's approvals become exactly `approve`
+    const signed = wins.filter(isSigned);
+    const ours = {};
+    signed.forEach(w => { if (w.color === color && w.value === value) ours[w.cardId] = true; });
+    const audit = auditSheet();
+    const width = AUDIT_HEADERS.length;
+    const rows = audit.getLastRow() > 1 ? audit.getRange(2, 1, audit.getLastRow() - 1, width).getDisplayValues() : [];
+    const kept = rows.filter(r => {
+      if (r[0] !== link.deck) return true;
+      // Drop this color and value's old rows, and rows for cards nobody has signed any more
+      if (r[1] === color && r[2] === value) return false;
+      return signed.some(w => w.color === r[1] && w.value === r[2] && w.cardId === r[3]);
+    }).map(r => r.map(asText));
+    const now = Utilities.formatDate(new Date(), sheetTz(), 'yyyy-MM-dd HH:mm');
+    approve.filter((cid, i) => ours[cid] && approve.indexOf(cid) === i).forEach(cid => {
+      kept.push([link.deck, color, value, asText(cid), 'approved', fingerprint(signed, color, value, cid), now]);
+    });
+    if (rows.length) audit.getRange(2, 1, rows.length, width).clearContent();
+    if (kept.length) audit.getRange(2, 1, kept.length, width).setNumberFormat('@').setValues(kept);
+    return auditInfo(link, wins);
+  },
+};
+
+function auditInfo(link, wins) {
+  const audit = auditSheet();
+  const rows = audit.getLastRow() > 1 ? audit.getRange(2, 1, audit.getLastRow() - 1, AUDIT_HEADERS.length).getDisplayValues() : [];
+  return {
+    deck: link.deck,
+    expires: link.expires ? link.expires.toISOString() : null,
+    wins: wins.map(w => ({
+      id: w.id, color: w.color, value: w.value, signer: w.signer, date: w.date, cardId: w.cardId,
+    })),
+    approvals: rows.filter(r => r[0] === link.deck && r[4] === 'approved')
+      .map(r => ({ color: r[1], value: r[2], cardId: r[3], fingerprint: r[5] })),
+  };
+}
+
+const isSigned = w => !!w.cardId && !!w.signer && w.signer !== '?';
+
+// A card's signatures as one string: "12:Bella:2026-10-30|40:Cole:2026-11-02".
+// Must match fingerprint() in audit.html.
+function fingerprint(wins, color, value, cid) {
+  return wins.filter(w => w.color === color && w.value === value && w.cardId === cid && isSigned(w))
+    .sort((a, b) => Number(a.id) - Number(b.id))
+    .map(w => w.id + ':' + w.signer + ':' + dayKey(w.date))
+    .join('|');
+}
+
+function sameWin(win, before) {
+  if (!before) return false;
+  return win.signer === String(before.signer) && win.cardId === String(before.cardId) &&
+    dayKey(win.date) === dayKey(before.date);
+}
+
 function linkInfo(link, wins) {
   return {
     deck: link.deck,
@@ -180,12 +308,14 @@ function linkFromRow(r) {
   return {
     code: String(r[0]), deck: String(r[1]), fromKey: fromKey, toKey: toKey,
     created: r[3], firstOpened: r[4], expires: isDate(r[5]) ? r[5] : null,
+    kind: String(r[8] == null ? '' : r[8]).trim(),
   };
 }
 
-// Finds the link for a code and checks it's still good. Opening a link for the first
-// time starts its 24 hours.
-function checkLink(code, opening) {
+// Finds the link for a code and checks it's still good, and that it's the right kind
+// (an audit link on the logging page doesn't work, and the other way round).
+// Opening a link for the first time starts its clock: 24 hours, or a week for audits.
+function checkLink(code, opening, kind) {
   if (typeof code !== 'string' || !/^[A-Za-z0-9]{12}$/.test(code)) throw new ApiError('invalid-link');
   const sheet = linksSheet();
   const rows = sheet.getDataRange().getValues();
@@ -193,11 +323,13 @@ function checkLink(code, opening) {
   for (let i = 1; i < rows.length; i++) {
     if (String(rows[i][0]) !== code) continue;
     const link = linkFromRow(rows[i]);
-    if (!DECKS[link.deck] || !link.fromKey) throw new ApiError('invalid-link');
+    if (!DECKS[link.deck] || link.kind !== (kind || '')) throw new ApiError('invalid-link');
+    if (link.kind !== 'audit' && !link.fromKey) throw new ApiError('invalid-link');
     if (!link.firstOpened) {
       if (!isDate(link.created) || now - link.created > UNOPENED_DAYS * 864e5) throw new ApiError('expired');
       if (!opening) throw new ApiError('invalid-link');
-      link.expires = new Date(now.getTime() + LINK_HOURS * 36e5);
+      const hours = link.kind === 'audit' ? AUDIT_HOURS : LINK_HOURS;
+      link.expires = new Date(now.getTime() + hours * 36e5);
       sheet.getRange(i + 1, 5, 1, 2).setValues([[now, link.expires]]);
     }
     if (!link.expires || now > link.expires) throw new ApiError('expired');
@@ -247,17 +379,21 @@ function setUpTabs() {
   if (!ss.getSheetByName(LINKS_TAB)) {
     const l = ss.insertSheet(LINKS_TAB);
     l.getRange('A:C').setNumberFormat('@');
-    l.getRange('H:H').setNumberFormat('@');
+    l.getRange('H:I').setNumberFormat('@');
     l.getRange(1, 1, 1, LINK_HEADERS.length).setValues([LINK_HEADERS]).setFontWeight('bold');
     l.setFrozenRows(1);
     l.hideSheet();
     made.push(LINKS_TAB + ' (hidden)');
   }
+  if (!ss.getSheetByName(AUDIT_TAB)) {
+    auditSheet();
+    made.push(AUDIT_TAB + ' (hidden)');
+  }
   SpreadsheetApp.getUi().alert(made.length ? 'Added tabs: ' + made.join(', ') : 'All tabs already exist.');
 }
 
 function showLinkDialog() {
-  const html = HtmlService.createHtmlOutputFromFile('LinkDialog').setWidth(460).setHeight(560);
+  const html = HtmlService.createHtmlOutputFromFile('LinkDialog').setWidth(460).setHeight(640);
   SpreadsheetApp.getUi().showModalDialog(html, 'Share links');
 }
 
@@ -298,7 +434,7 @@ function createShareLinks(deck, fromIso, toIso, perDay, skipWeekends) {
   lock.waitLock(15000);
   try {
     const sheet = linksSheet();
-    if (!sheet.getRange(1, 8).getValue()) sheet.getRange(1, 8).setValue('To').setFontWeight('bold');
+    ensureLinkHeaders(sheet);
     const now = new Date();
     let row = Math.max(sheet.getLastRow(), 1) + 1;
     const made = ranges.map(([f, t]) => {
@@ -314,6 +450,31 @@ function createShareLinks(deck, fromIso, toIso, perDay, skipWeekends) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// Called from the dialog: one link that can review and fix every card in a deck, for a week
+function createAuditLink(deck) {
+  if (!DECKS[deck]) throw new Error('Unknown deck.');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(15000);
+  try {
+    const sheet = linksSheet();
+    ensureLinkHeaders(sheet);
+    const row = Math.max(sheet.getLastRow(), 1) + 1;
+    const code = newCode();
+    sheet.getRange(row, 1, 1, 3).setNumberFormat('@').setValues([[code, deck, '']]);
+    sheet.getRange(row, 4, 1, 4).setValues([[new Date(), '', '', '']]);
+    sheet.getRange(row, 8, 1, 2).setNumberFormat('@').setValues([['', 'audit']]);
+    return { deck: DECKS[deck].tab, links: [{ url: AUDIT_URL + code, label: 'Audit link' }], active: activeLinks() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Links tabs made before To and Kind existed get their headers
+function ensureLinkHeaders(sheet) {
+  if (!sheet.getRange(1, 8).getValue()) sheet.getRange(1, 8).setValue('To').setFontWeight('bold');
+  if (!sheet.getRange(1, 9).getValue()) sheet.getRange(1, 9).setValue('Kind').setFontWeight('bold');
 }
 
 // Called from the dialog: stop a link working right away
@@ -338,15 +499,20 @@ function activeLinks() {
   const tz = sheetTz();
   return linksSheet().getDataRange().getValues().slice(1)
     .map(linkFromRow)
-    .filter(l => DECKS[l.deck] && l.fromKey && linkUsable(l, now))
+    .filter(l => DECKS[l.deck] && (l.fromKey || l.kind === 'audit') && linkUsable(l, now))
     .reverse()
-    .map(l => ({
-      code: l.code,
-      url: SITE_URL + l.code,
-      deck: DECKS[l.deck].tab,
-      label: rangeLabel(l.fromKey, l.toKey),
-      status: l.firstOpened ? 'Works until ' + Utilities.formatDate(l.expires, tz, 'EEE h:mm a') : 'Not opened yet',
-    }));
+    .map(l => {
+      const audit = l.kind === 'audit';
+      return {
+        code: l.code,
+        url: (audit ? AUDIT_URL : SITE_URL) + l.code,
+        deck: DECKS[l.deck].tab,
+        label: audit ? 'Audit link' : rangeLabel(l.fromKey, l.toKey),
+        status: l.firstOpened
+          ? 'Works until ' + Utilities.formatDate(l.expires, tz, audit ? 'EEE MMM d h:mm a' : 'EEE h:mm a')
+          : audit ? 'Not opened yet · works 7 days once opened' : 'Not opened yet',
+      };
+    });
 }
 
 // The latest day in a deck's wins or its links, as a key
@@ -356,6 +522,7 @@ function latestDay(deck) {
   linksSheet().getDataRange().getValues().slice(1).forEach(r => {
     if (String(r[1]) !== deck) return;
     const l = linkFromRow(r);
+    if (l.kind === 'audit') return;
     if (l.toKey > latest) latest = l.toKey;
   });
   return latest;
@@ -366,6 +533,19 @@ function latestDay(deck) {
 function linksSheet() {
   const s = SpreadsheetApp.getActive().getSheetByName(LINKS_TAB);
   if (!s) throw new ApiError('not-set-up');
+  return s;
+}
+
+// The Audit tab, made (hidden) the first time it's needed
+function auditSheet() {
+  const ss = SpreadsheetApp.getActive();
+  let s = ss.getSheetByName(AUDIT_TAB);
+  if (s) return s;
+  s = ss.insertSheet(AUDIT_TAB);
+  s.getRange('A:G').setNumberFormat('@');
+  s.getRange(1, 1, 1, AUDIT_HEADERS.length).setValues([AUDIT_HEADERS]).setFontWeight('bold');
+  s.setFrozenRows(1);
+  s.hideSheet();
   return s;
 }
 

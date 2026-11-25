@@ -1,0 +1,1276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spicy Uno Signature Audit</title>
+<meta name="description" content="Check every Spicy Uno card's signatures, fix mistakes, and approve each card.">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#ffffff">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="stylesheet" href="/site.css">
+<script src="/theme.js"></script>
+<script src="/uno-decks.js"></script>
+<style>
+  :root {
+    --page-width: 1120px;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --ok: #1f7a45;
+    --warn: #b45309;
+    --ink-mix: 62%; --fill-mix: 10%; --edge-mix: 55%;
+    --btn: color-mix(in srgb, var(--text) 9%, var(--bg));
+    --btn-hover: color-mix(in srgb, var(--text) 15%, var(--bg));
+  }
+  [data-theme="dark"] {
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --ink-mix: 72%; --fill-mix: 16%; --edge-mix: 50%;
+    --btn: color-mix(in srgb, var(--text) 11%, var(--bg));
+    --btn-hover: color-mix(in srgb, var(--text) 18%, var(--bg));
+  }
+
+  .intro { color: var(--muted); margin: 0 0 24px; }
+  .suit {
+    --ink:  color-mix(in srgb, var(--suit) var(--ink-mix), var(--text));
+    --fill: color-mix(in srgb, var(--suit) var(--fill-mix), var(--bg));
+    --edge: color-mix(in srgb, var(--suit) var(--edge-mix), var(--bg));
+  }
+  .mono { font-family: var(--mono); }
+  .spacer { flex: 1; }
+
+  /* ---------- Buttons ---------- */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    font: 600 0.95rem var(--font); color: var(--text); background: var(--btn);
+    border: none; border-radius: 10px; padding: 8px 14px; min-height: 40px; cursor: pointer;
+    transition: background-color .1s, filter .1s, opacity .15s, color .1s;
+  }
+  .btn:hover { background: var(--btn-hover); }
+  .btn .lucide { width: 18px; height: 18px; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent); filter: brightness(1.1); }
+  .btn-primary[aria-disabled="true"] { opacity: .45; }
+  .btn-sm { min-height: 32px; padding: 4px 10px; font-size: 0.85rem; }
+  .btn-danger { color: var(--accent); }
+  .btn.armed { background: var(--accent); color: #fff; }
+  .btn.st-approve[aria-pressed="true"] { background: var(--ok); color: var(--bg); }
+  .btn.st-reject[aria-pressed="true"]  { background: var(--accent); color: #fff; }
+
+  .status-msg { font-size: 0.9rem; color: var(--muted); margin: 0; }
+  .status-msg.ok  { color: var(--ok); }
+  .status-msg.err { color: var(--accent); }
+
+  /* ---------- Progress ---------- */
+  .progress-block { margin: 0 0 28px; }
+  .progress { display: flex; gap: 3px; height: 16px; }
+  .seg { min-width: 4px; border-radius: 5px; overflow: hidden; background: color-mix(in srgb, var(--suit) 20%, var(--bg)); }
+  .seg-fill { height: 100%; background: var(--suit); transition: width .4s ease-out; }
+  .progress-text { margin: 10px 0 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; }
+  .progress-text strong { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+
+  /* ---------- Layout: categories on the left, cards on the right ---------- */
+  .audit-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 24px; align-items: start; }
+  .sidebar {
+    position: sticky; top: 16px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+  }
+  .sidebar-header {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    padding: 10px 12px; border-bottom: 1px solid var(--line);
+    font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+  }
+  .sidebar-header .count { color: var(--text); letter-spacing: 0; }
+  .cat-list { max-height: calc(100vh - 80px); overflow-y: auto; background: var(--bg); }
+  .color-head {
+    position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 8px;
+    padding: 6px 12px; background: var(--surface); border-bottom: 1px solid var(--line);
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+  }
+  .color-head .count { margin-left: auto; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+  .cat-row {
+    display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 12px; cursor: pointer;
+    border: none; border-bottom: 1px solid var(--line); border-left: 3px solid transparent;
+    background: none; color: var(--text); font: 400 0.95rem var(--font); text-align: left;
+  }
+  .cat-row:hover { background: var(--surface); }
+  .cat-row[aria-current="true"] { background: var(--tint); border-left-color: var(--accent); }
+  .cat-row:focus-visible { outline-offset: -2px; }
+  .cat-row.is-done .cat-name { color: var(--muted); }
+  .cat-row .cat-count { color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+  .badges { margin-left: auto; display: flex; align-items: center; gap: 3px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; background: var(--suit); }
+  .ic { display: inline-flex; }
+  .ic .lucide { width: 16px; height: 16px; }
+  .ic.ok { color: var(--ok); } .ic.bad { color: var(--accent); } .ic.warn { color: var(--warn); }
+  .unsaved { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin: 0 4px; }
+
+  /* ---------- Main panel ---------- */
+  .main { display: flex; flex-direction: column; gap: 14px; min-width: 0; scroll-margin-top: 16px; }
+  .main.enter { animation: rise .2s ease-out; }
+  .detail-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+  .detail-title h2 { margin: 0; font-size: 1.8rem; line-height: 1.1; color: var(--ink); }
+  .detail-title .sub { color: var(--muted); font-size: 0.95rem; }
+  .note {
+    display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; border-radius: 10px;
+    background: color-mix(in srgb, var(--warn) 12%, var(--bg)); border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--bg));
+  }
+  .note .lucide { color: var(--warn); margin-top: 3px; }
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .check { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 0.95rem; cursor: pointer; }
+  .check input { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; }
+  .empty { color: var(--muted); padding: 24px 0; }
+
+  .group + .group { margin-top: 18px; }
+  .group-head { margin: 0 0 10px; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .group-head .count { color: var(--text); letter-spacing: 0; margin-left: 4px; }
+
+  /* ---------- Cards (same tile as the signatures page) ---------- */
+  .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 8px 12px; padding-top: 8px; }
+  .card-wrap { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .card-lift { position: relative; display: flex; transition: transform .18s cubic-bezier(.3,1.6,.6,1); }
+  .uno-card {
+    flex: 1; display: flex; flex-direction: column; min-height: 150px; padding: 0; overflow: hidden; cursor: pointer;
+    border: 2px solid var(--suit); border-radius: 10px; background: var(--fill); color: var(--text);
+    font: inherit; text-align: left; transition: box-shadow .18s, opacity .15s;
+  }
+  .card-head { background: var(--suit); color: var(--on); padding: 6px 8px 4px; }
+  .card-meta { display: flex; justify-content: space-between; gap: 6px; font-size: 0.72rem; font-weight: 700; white-space: nowrap; opacity: .9; }
+  .card-head .cval { font-size: 1.4rem; font-weight: 700; line-height: 1.15; }
+  .card-body { flex: 1; display: flex; flex-direction: column; gap: 1px; padding: 6px 8px 8px; }
+  .sn { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 4px; align-items: baseline; font-size: 0.8rem; line-height: 1.4; }
+  .sn .star { color: var(--ink); font-size: 0.7rem; }
+  .sn .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sn .mult { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .sn.more .name { color: var(--muted); }
+  .uno-card.st-approved { opacity: .62; }
+  .uno-card.st-rejected { border-style: dashed; }
+
+  /* Status chips sit on the card's top corner */
+  .card-chips { position: absolute; top: -8px; right: -8px; z-index: 2; display: flex; gap: 3px; }
+  .chip-ic {
+    display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
+    background: var(--bg); box-shadow: 0 1px 4px rgba(0,0,0,.3);
+  }
+  .chip-ic .lucide { width: 18px; height: 18px; }
+  .chip-ic.ok { color: var(--ok); } .chip-ic.bad { color: var(--accent); } .chip-ic.warn { color: var(--warn); }
+  .chip-ic.pop { animation: pop-in .25s cubic-bezier(.3,1.8,.6,1); }
+
+  /* Approve / reject appear under a card on hover (always there on touch screens) */
+  .card-actions { display: flex; justify-content: center; gap: 6px; opacity: 0; transform: translateY(-6px); transition: opacity .15s, transform .15s; }
+  .act {
+    display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 32px; padding: 0;
+    border: none; border-radius: 8px; background: var(--btn); color: var(--muted); cursor: pointer;
+    transition: background-color .1s, color .1s, transform .1s;
+  }
+  .act .lucide { width: 20px; height: 20px; }
+  .act.approve:hover { color: var(--ok); }
+  .act.reject:hover { color: var(--accent); }
+  .act.approve[aria-pressed="true"] { background: var(--ok); color: var(--bg); }
+  .act.reject[aria-pressed="true"]  { background: var(--accent); color: #fff; }
+  .act:active { transform: scale(.92); }
+  .card-wrap:hover .card-lift, .card-wrap:focus-within .card-lift { transform: translateY(-4px) rotate(-1.2deg); }
+  .card-wrap:hover .uno-card, .card-wrap:focus-within .uno-card { box-shadow: 0 10px 22px rgba(0,0,0,.2); opacity: 1; }
+  .card-wrap:hover .card-actions, .card-wrap:focus-within .card-actions { opacity: 1; transform: none; }
+
+  /* ---------- Dialogs ---------- */
+  .dlg {
+    width: min(720px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow-y: auto; padding: 0;
+    border: none; border-radius: 14px; background: var(--bg); color: var(--text);
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+  }
+  .dlg.narrow { width: min(460px, calc(100vw - 32px)); }
+  .dlg::backdrop { background: rgba(0,0,0,.45); }
+  .dlg[open] { animation: pop .18s ease-out; }
+  .dlg-body { padding: 20px 22px 22px; display: flex; flex-direction: column; gap: 14px; }
+  .dlg h2 { margin: 0; font-size: 1.4rem; line-height: 1.2; }
+  .dlg-head { display: flex; align-items: flex-start; gap: 12px; }
+  .dlg-head .kick { margin: 0; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); }
+  .dlg-head .cid { font-size: 0.85rem; font-weight: 400; color: var(--muted); margin-left: 6px; }
+  .dlg-head .chips { display: flex; gap: 4px; margin-top: 4px; }
+  .dlg-close { margin-left: auto; padding: 8px; min-height: 0; }
+  .flag-list { margin: 0; padding: 10px 14px 10px 34px; border-radius: 10px; background: color-mix(in srgb, var(--warn) 12%, var(--bg)); }
+  .flag-list li { margin: 2px 0; }
+  .muted-note { margin: 0; color: var(--muted); font-size: 0.9rem; }
+  .dlg-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+  .table-wrap { overflow-x: auto; margin: 0 -4px; padding: 0 4px; }
+  .sig-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+  .sig-table th { text-align: left; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); padding: 0 6px 6px; }
+  .sig-table td { padding: 4px 6px; border-top: 1px solid var(--line); vertical-align: middle; }
+  .sig-table td.num { font-family: var(--mono); font-size: 0.8rem; color: var(--muted); white-space: nowrap; border-left: 3px solid transparent; }
+  .sig-table tr.changed td.num { border-left-color: var(--accent); }
+  .sig-table tr.dup td { background: color-mix(in srgb, var(--warn) 12%, var(--bg)); }
+  .sig-table input, .sig-table select {
+    font: 400 0.95rem var(--font); color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; width: 100%; min-width: 0;
+  }
+  .sig-table input[type="text"] { min-width: 120px; }
+  .sig-table input[type="date"] { min-width: 140px; }
+  .sig-table select { min-width: 110px; cursor: pointer; }
+  .sig-table input:focus, .sig-table select:focus { outline: none; border-color: var(--accent); }
+  .sig-table input.missing { border-color: var(--warn); }
+  .icon-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 34px; height: 34px; padding: 0 8px;
+    border: none; border-radius: 8px; background: none; color: var(--muted); cursor: pointer; font: 600 0.85rem var(--font); white-space: nowrap;
+  }
+  .icon-btn .lucide { width: 18px; height: 18px; }
+  .icon-btn:hover { color: var(--accent); background: var(--btn); }
+  .icon-btn.armed { background: var(--accent); color: #fff; }
+
+  .help-dialog h3 { margin: 6px 0 0; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .help-dialog ol, .help-dialog ul { margin: 0; padding-left: 1.3em; }
+  .help-dialog li { margin: 4px 0; }
+  .help-dialog p { margin: 0; }
+  .topbar .help-btn { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; padding: 0; border-radius: 999px; }
+
+  /* ---------- Page states, toast ---------- */
+  #app { border-top: 1px solid var(--line); padding-top: 24px; }
+  .sync-status { font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+  .toast {
+    position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 50;
+    display: flex; align-items: center; gap: 12px; max-width: calc(100% - 32px);
+    padding: 10px 16px; border-radius: 12px; background: var(--text); color: var(--bg);
+    box-shadow: 0 8px 24px rgba(0,0,0,.25);
+    animation: toast-in .18s ease-out; transition: opacity .15s, transform .15s;
+  }
+  .toast.leaving { opacity: 0; transform: translate(-50%, 12px); }
+  .empty-state { text-align: center; padding: 48px 16px; color: var(--muted); animation: fade .2s ease-out; }
+  .empty-state strong { display: block; font-size: 1.4rem; color: var(--text); margin-bottom: 4px; }
+
+  /* ---------- Motion ---------- */
+  @keyframes rise   { from { opacity: 0; transform: translateY(6px); } }
+  @keyframes pop    { from { opacity: 0; transform: scale(.96); } }
+  @keyframes pop-in { from { opacity: 0; transform: scale(.3); } }
+  @keyframes fade   { from { opacity: 0; } }
+  @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 12px); } }
+  .cards-grid.enter .card-wrap { animation: rise .2s ease-out backwards; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  }
+
+  /* ---------- Phone ---------- */
+  @media (max-width: 760px) {
+    .audit-layout { grid-template-columns: 1fr; gap: 20px; }
+    .sidebar { position: static; }
+    .cat-list { max-height: 260px; }
+    .cards-grid { grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); }
+    .detail-title h2 { font-size: 1.5rem; }
+    .dlg-body { padding: 16px; }
+  }
+  /* Narrow dialog: each signature on two lines (win, name, delete / date, card) */
+  @media (max-width: 560px) {
+    .sig-table thead { display: none; }
+    .sig-table tr {
+      display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: center;
+      grid-template-areas: "num signer signer del" "date date card card";
+      padding: 8px 4px; border-top: 1px solid var(--line);
+    }
+    .sig-table td { padding: 0; border: none; }
+    .sig-table td:nth-child(1) { grid-area: num; }
+    .sig-table td:nth-child(2) { grid-area: signer; }
+    .sig-table td:nth-child(3) { grid-area: date; }
+    .sig-table td:nth-child(4) { grid-area: card; }
+    .sig-table td:nth-child(5) { grid-area: del; }
+    .sig-table tr.dup { background: color-mix(in srgb, var(--warn) 12%, var(--bg)); }
+    .sig-table tr.dup td { background: none; }
+    .sig-table tr.changed { box-shadow: inset 3px 0 var(--accent); }
+    .sig-table input[type="text"], .sig-table input[type="date"], .sig-table select { min-width: 0; }
+  }
+  @media (hover: none) {
+    .card-actions { opacity: 1; transform: none; }
+    .card-wrap:hover .card-lift { transform: none; }
+  }
+</style>
+</head>
+<body>
+<main class="page">
+  <nav class="topbar">
+    <a class="home" href="/"><svg class="lucide" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>stewbs</a>
+    <div class="topbar-actions">
+      <span class="sync-status" id="syncStatus" role="status" hidden></span>
+      <button type="button" class="help-btn" id="helpBtn" aria-label="How this works" title="How this works (?)" aria-haspopup="dialog">
+        <svg class="lucide" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+      </button>
+      <button type="button" class="switch" data-theme-toggle role="switch" aria-label="Dark mode" title="Dark mode"></button>
+    </div>
+  </nav>
+
+  <p class="kicker" id="kicker">Spicy Uno</p>
+  <h1>Signature audit</h1>
+  <p class="intro" id="intro">Check every card's signatures and approve it.</p>
+
+  <section id="app"><div id="content"></div></section>
+
+  <datalist id="signerList"></datalist>
+  <div class="toast" id="toast" role="status" hidden></div>
+  <dialog class="dlg" id="cardDlg" aria-labelledby="cardDlgTitle"><div class="dlg-body" id="cardDlgBody"></div></dialog>
+  <dialog class="dlg narrow" id="confirmDlg" aria-labelledby="confirmTitle"><div class="dlg-body" id="confirmBody"></div></dialog>
+  <dialog class="dlg narrow help-dialog" id="helpDlg" aria-labelledby="helpTitle"><div class="dlg-body" id="helpBody"></div></dialog>
+</main>
+
+<script>
+// ── Deck setup ─────────────────────────────────────────────────────────────
+// Physical-card suffixes, in order. Must match SUFFIX_SEQ in signatures.html and Code.gs.
+const SUFFIX_SEQ = `123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%!&()*+-/;<=>?^|~0αβγδεζηθικλμνξοπρστυφχψω`;
+const WILD_COLOR = '#7c7f87';
+
+// Decks in the sheet. `packs` is how many packs of cards were shuffled together:
+//   2 packs: Original, Gridfetti 1.0
+//   5 packs: Gridfetti 2.0, Harvest, Discolight, Gridfetti 3.0
+//   7 packs: Matrix, #winning (from January), Gridfetti 4.0 (from next July)
+// A new deck needs an entry here, in DECKS in signatures.html, and in DECKS in Code.gs.
+const DECKS = {
+  gridfetti: { name: 'Gridfetti 3.0', scheme: '90s', colors: ['Gold', 'Pink', 'Purple', 'Teal', 'Wild'], packs: 5 },
+  matrix:    { name: 'Matrix',        scheme: '00s', colors: ['Blue', 'Green', 'Red', 'Yellow', 'Wild'], packs: 7 },
+};
+const VALUES = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'Draw 2', 'Skip', 'Reverse'];
+const WILD_VALUES = ['Basic', 'Draw 4'];
+// Copies of each card in one pack (from the deck list on /uno.html, which is for 5 packs)
+function perPack(color, value) {
+  if (color === 'Wild') return value === 'Basic' ? 8 : value === 'Draw 4' ? 4 : 0;
+  return value === '0' ? 1 : VALUES.includes(value) ? 2 : 0;
+}
+
+// ── Icons (Lucide, ISC license) ────────────────────────────────────────────
+const svg = p => `<svg class="lucide" viewBox="0 0 24 24" aria-hidden="true">${p}</svg>`;
+const I = {
+  check: svg('<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>'),
+  x:     svg('<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>'),
+  warn:  svg('<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>'),
+  trash: svg('<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>'),
+  plus:  svg('<path d="M5 12h14"/><path d="M12 5v14"/>'),
+  close: svg('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'),
+};
+
+// ── State ──────────────────────────────────────────────────────────────────
+let linkCode = '';
+let link = null;              // { deck, expires }
+let activeDeck = 'matrix';
+let base = [];                // wins as the sheet has them
+let baseById = new Map();
+let baseByKey = new Map();    // "Blue|7" → wins
+let approvals = new Map();    // "Blue|7|B7_3" → fingerprint saved when approved
+let expectedPrefix = new Map(); // "Blue|7" → "B7_"
+// Unsaved work, per color and value, kept in this browser until Mark done:
+// { edits: { id: { before, signer, date, cardId } }, adds: [{ tmp, signer, date, cardId }],
+//   deletes: { id: before }, status: { cardId: 'approved' | 'rejected' | 'unreviewed' } }
+let drafts = {};
+let selKey = null;
+let groupByFirst = false;
+let openCid = null;           // card shown in the card dialog
+let saving = false;
+let shownKey = null;          // the category the main panel last showed
+let popCid = null;            // card whose status chip should pop in on the next draw
+
+// ── Small helpers ──────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+const catKey = w => `${w.color}|${w.value}`;
+const splitKey = k => { const i = k.indexOf('|'); return [k.slice(0, i), k.slice(i + 1)]; };
+const catName = k => splitKey(k).join(' ');
+const isSigned = w => !!w.cardId && !!w.signer && w.signer !== '?';
+const plural = (n, one, many) => `${n.toLocaleString()} ${n === 1 ? one : (many || one + 's')}`;
+const possessive = name => `${name}’s`;
+
+function suitColor(color) {
+  const name = String(color).toLowerCase();
+  const find = scheme => scheme && ['a', 'b', 'c', 'd'].map(s => scheme[s]).find(([n]) => n.toLowerCase() === name);
+  const hit = find(UNO_DECKS[DECKS[activeDeck].scheme]) || Object.values(UNO_DECKS).map(find).find(Boolean);
+  return hit ? hit[1] : WILD_COLOR;
+}
+const colorCtx = document.createElement('canvas').getContext('2d');
+function textOn(color) {
+  colorCtx.fillStyle = '#000'; colorCtx.fillStyle = color;
+  const hex = colorCtx.fillStyle;
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map(v => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.179 ? '#1c1d21' : '#ffffff';
+}
+function suitStyle(color) {
+  const c = suitColor(color);
+  return `--suit:${esc(c)};--on:${textOn(c)}`;
+}
+
+// "10/30/26", "10/30/2026" and "Wed Nov 18 2026 00:00:00 GMT-0600" become "2026-10-30"
+function dayKey(v) {
+  const s = String(v == null ? '' : v).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/.exec(s);
+  if (m) {
+    const y = m[3].length === 2 ? '20' + m[3] : m[3];
+    return `${y}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+  }
+  if (/[a-z]{3} \d{1,2} \d{4}/i.test(s)) {
+    const d = new Date(s.replace(/\s*\(.*\)$/, ''));
+    if (!isNaN(d)) return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  return '';
+}
+const keyToMdy = k => k ? `${k.slice(5, 7)}/${k.slice(8, 10)}/${k.slice(2, 4)}` : '';
+function formatDay(k) {
+  if (!k) return 'no date';
+  const [y, m, d] = k.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+}
+function cardLabel(cid) {
+  const n = SUFFIX_SEQ.indexOf(String(cid).slice(-1)) + 1;
+  return n ? `Card ${n}` : String(cid);
+}
+function valueSortKey(v) {
+  if (v !== '' && !isNaN(v)) return '0_' + String(parseInt(v)).padStart(3, '0');
+  return '1_' + v.toLowerCase();
+}
+
+// Same as the server's fingerprint() in Code.gs
+function fingerprint(sigs) {
+  return [...sigs].sort((a, b) => Number(a.id) - Number(b.id))
+    .map(s => `${s.id}:${s.signer}:${s.date}`).join('|');
+}
+function sameWin(w, before) {
+  return !!before && w.signer === before.signer && w.cardId === before.cardId && dayKey(w.date) === dayKey(before.date);
+}
+
+// ── Sheet API ──────────────────────────────────────────────────────────────
+const PROD_API = 'https://script.google.com/macros/s/AKfycby9GCZ5w-2jrnLqmvhTSQWwmTa5J0WEUsK1hncPz2RndKMQ0So_kD8TbE8EkWzJpkFSBA/exec';
+const IS_LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+const SCRIPT_URL = (IS_LOCAL && new URLSearchParams(location.search).get('api')) || PROD_API;
+
+class LinkError extends Error {}
+const ERROR_TEXT = {
+  network:       "Couldn't reach the sheet. Check your connection and try again.",
+  busy:          'The sheet is busy. Try again in a moment.',
+  conflict:      'Some of these wins changed in the sheet since you edited them.',
+  'bad-request': "The sheet didn't accept those changes. Check for empty names or dates.",
+  'not-set-up':  "The sheet isn't set up yet.",
+  server:        'Something went wrong on the sheet side. Try again.',
+};
+
+async function api(action, data) {
+  let res;
+  try {
+    const r = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // skips the CORS preflight
+      body: JSON.stringify(Object.assign({ action, code: linkCode }, data)),
+    });
+    res = await r.json();
+  } catch (e) {
+    throw new Error('network');
+  }
+  if (!res.ok) {
+    if (res.error === 'expired' || res.error === 'invalid-link') {
+      showGate(res.error);
+      throw new LinkError(res.error);
+    }
+    throw new Error(res.error || 'server');
+  }
+  link = { deck: res.deck, expires: res.expires ? new Date(res.expires) : null };
+  if (DECKS[res.deck]) activeDeck = res.deck;
+  updateHeader();
+  return res;
+}
+
+// Take the sheet's wins and approvals, then drop any unsaved change to a win that changed underneath it
+function setBase(res) {
+  base = res.wins;
+  approvals = new Map((res.approvals || []).map(a => [`${a.color}|${a.value}|${a.cardId}`, a.fingerprint]));
+  baseById = new Map(base.map(w => [w.id, w]));
+  baseByKey = new Map();
+  base.forEach(w => {
+    const k = catKey(w);
+    if (!baseByKey.has(k)) baseByKey.set(k, []);
+    baseByKey.get(k).push(w);
+  });
+  // The usual card ID start for each color and value: whatever most of its cards use
+  expectedPrefix = new Map();
+  baseByKey.forEach((ws, k) => {
+    const counts = {};
+    ws.filter(isSigned).forEach(w => {
+      const i = w.cardId.indexOf('_');
+      if (i > 0) { const p = w.cardId.slice(0, i + 1); counts[p] = (counts[p] || 0) + 1; }
+    });
+    const best = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0];
+    if (best) expectedPrefix.set(k, best);
+  });
+  document.getElementById('signerList').innerHTML =
+    [...new Set(base.filter(isSigned).map(w => w.signer))].sort((a, b) => a.localeCompare(b))
+      .map(n => `<option value="${esc(n)}">`).join('');
+
+  const dropped = [];
+  Object.entries(drafts).forEach(([k, d]) => {
+    // A card that lost a change needs another look, so its approval goes too
+    for (const [id, e] of Object.entries(d.edits)) {
+      const w = baseById.get(id);
+      if (!w || !sameWin(w, e.before)) { delete d.edits[id]; dropped.push(id); unapprove(d, e.cardId); unapprove(d, e.before.cardId); }
+    }
+    for (const [id, b] of Object.entries(d.deletes)) {
+      const w = baseById.get(id);
+      if (!w || !sameWin(w, b)) { delete d.deletes[id]; dropped.push(id); unapprove(d, b.cardId); }
+    }
+    tidy(k, false);
+  });
+  saveDrafts();
+  if (dropped.length) {
+    showToast(`${plural(dropped.length, 'win')} changed in the sheet since you edited ${dropped.length === 1 ? 'it' : 'them'}, so ${dropped.length === 1 ? 'that change was' : 'those changes were'} dropped: #${dropped.join(', #')}. Check ${dropped.length === 1 ? 'its card' : 'their cards'} again.`);
+  }
+  return dropped;
+}
+
+// ── Drafts (this browser only, until Mark done) ───────────────────────────
+const draftStore = () => 'spicyUnoAudit_' + linkCode;
+function loadDrafts() {
+  try { drafts = JSON.parse(localStorage.getItem(draftStore()) || '{}') || {}; } catch (e) { drafts = {}; }
+  Object.values(drafts).forEach(d => {
+    d.edits = d.edits || {}; d.deletes = d.deletes || {}; d.status = d.status || {};
+    d.adds = (d.adds || []).filter(a => a && a.tmp && a.cardId);
+  });
+}
+function saveDrafts() {
+  try {
+    if (Object.keys(drafts).length) localStorage.setItem(draftStore(), JSON.stringify(drafts));
+    else localStorage.removeItem(draftStore());
+  } catch (e) {}
+}
+function draftFor(key) {
+  return drafts[key] || (drafts[key] = { edits: {}, adds: [], deletes: {}, status: {} });
+}
+// Forget a draft that no longer changes anything
+function tidy(key, save = true) {
+  const d = drafts[key];
+  if (d && !Object.keys(d.edits).length && !d.adds.length && !Object.keys(d.deletes).length && !Object.keys(d.status).length) {
+    delete drafts[key];
+  }
+  if (save) saveDrafts();
+}
+
+// ── The working view: the sheet plus this browser's changes ───────────────
+function view(key) {
+  const d = drafts[key];
+  const rows = [];
+  (baseByKey.get(key) || []).forEach(w => {
+    if (!isSigned(w) || (d && d.deletes[w.id])) return;
+    const e = d && d.edits[w.id];
+    rows.push(e
+      ? { id: w.id, n: Number(w.id), signer: e.signer, date: e.date, cardId: e.cardId, changed: true }
+      : { id: w.id, n: Number(w.id), signer: w.signer, date: dayKey(w.date), cardId: w.cardId, changed: false });
+  });
+  if (d) d.adds.forEach((a, i) => rows.push({ id: a.tmp, n: 1e9 + i, signer: a.signer, date: a.date, cardId: a.cardId, changed: true, added: true }));
+  return rows;
+}
+const bySig = (a, b) => (a.date || '9999').localeCompare(b.date || '9999') || a.n - b.n;
+const suffixIndex = cid => { const i = SUFFIX_SEQ.indexOf(String(cid).slice(-1)); return i < 0 ? 999 : i; };
+
+function prefixFor(key) {
+  if (expectedPrefix.has(key)) return expectedPrefix.get(key);
+  const [color, value] = splitKey(key);
+  const v = !isNaN(value) && value !== '' ? value : { 'Draw 2': 'D', 'Draw 4': 'D', Skip: 'S', Reverse: 'R', Basic: 'B' }[value] || value[0].toUpperCase();
+  return `${color[0].toUpperCase()}${v}_`;
+}
+
+// Every card of a color and value, with its signatures, status and problems
+function cardsOf(key) {
+  const [color, value] = splitKey(key);
+  const d = drafts[key];
+  const prefix = prefixFor(key);
+  const by = new Map();
+  view(key).forEach(r => {
+    if (!by.has(r.cardId)) by.set(r.cardId, []);
+    by.get(r.cardId).push(r);
+  });
+  const rank = { null: 0, rejected: 1, approved: 2 };
+  return [...by].map(([cid, sigs]) => {
+    sigs.sort(bySig);
+    const saved = approvals.get(`${key}|${cid}`);
+    const savedOk = saved != null && saved === fingerprint(sigs);
+    const st = d && d.status[cid];
+    const status = st === 'approved' || st === 'rejected' ? st : st === 'unreviewed' ? null : savedOk ? 'approved' : null;
+    return { cid, sigs, status, savedOk, stale: saved != null && !savedOk, first: sigs[0].signer, ...checks(sigs, cid, prefix, color, value) };
+  }).sort((a, b) => rank[a.status] - rank[b.status] || b.sigs.length - a.sigs.length || suffixIndex(a.cid) - suffixIndex(b.cid));
+}
+
+// Automatic checks. Errors have to be fixed before Mark done; warnings are things to look at.
+function checks(sigs, cid, prefix, color, value) {
+  const warnings = [], errors = [];
+  const noName = sigs.filter(s => !s.signer.trim() || s.signer.trim() === '?').length;
+  const noDate = sigs.filter(s => !s.date).length;
+  if (noName) errors.push(`${plural(noName, 'signature')} ${noName === 1 ? 'has' : 'have'} no name`);
+  if (noDate) errors.push(`${plural(noDate, 'signature')} ${noDate === 1 ? 'has' : 'have'} no date`);
+  const perDay = {};
+  sigs.forEach(s => { if (s.date) perDay[s.date] = (perDay[s.date] || 0) + 1; });
+  const dupDays = Object.keys(perDay).filter(k => perDay[k] > 1).sort();
+  dupDays.forEach(k => warnings.push(`Signed ${perDay[k]} times on ${formatDay(k)}`));
+  if (!cid.startsWith(prefix)) warnings.push(`Card ID ${cid} doesn’t look like a ${color} ${value} (they start with ${prefix})`);
+  return { warnings, errors, dupDays: new Set(dupDays) };
+}
+
+function copiesOf(key) {
+  return perPack(...splitKey(key)) * DECKS[activeDeck].packs;
+}
+
+// What the list and progress bar need about one color and value
+function summarize(key) {
+  const cards = cardsOf(key);
+  const s = { key, cards, sigs: 0, reviewed: 0, approved: 0, rejected: 0, todo: 0, flagged: 0, errors: 0 };
+  cards.forEach(c => {
+    s.sigs += c.sigs.length;
+    if (c.status === 'approved') { s.approved++; s.reviewed += c.sigs.length; }
+    else if (c.status === 'rejected') s.rejected++;
+    else s.todo++;
+    if (c.warnings.length || c.errors.length) s.flagged++;
+    if (c.errors.length) s.errors++;
+  });
+  s.copies = copiesOf(key);
+  s.over = s.copies > 0 && cards.length > s.copies;
+  s.draft = !!drafts[key];
+  s.done = cards.length > 0 && s.approved === cards.length;
+  s.ready = s.done && !s.errors;
+  return s;
+}
+
+// Every color and value in the deck, in order, plus any odd ones found in the sheet
+function categoryKeys() {
+  const keys = [];
+  DECKS[activeDeck].colors.forEach(c => (c === 'Wild' ? WILD_VALUES : VALUES).forEach(v => keys.push(`${c}|${v}`)));
+  const extra = [...baseByKey.keys()].filter(k => !keys.includes(k) && baseByKey.get(k).some(isSigned))
+    .sort((a, b) => a.localeCompare(b) || valueSortKey(splitKey(a)[1]).localeCompare(valueSortKey(splitKey(b)[1])));
+  return keys.concat(extra);
+}
+
+// ── Changes ────────────────────────────────────────────────────────────────
+// Editing a card's signatures takes back its approval, so it gets looked at again
+function unapprove(d, cid) {
+  if (cid && d.status[cid] === 'approved') delete d.status[cid];
+}
+
+function setField(key, rowId, field, val) {
+  const d = draftFor(key);
+  const add = d.adds.find(a => a.tmp === rowId);
+  let oldCid;
+  if (add) {
+    oldCid = add.cardId;
+    add[field] = val;
+  } else {
+    const w = baseById.get(rowId);
+    if (!w) return;
+    const e = d.edits[rowId] || (d.edits[rowId] = {
+      before: { signer: w.signer, date: w.date, cardId: w.cardId },
+      signer: w.signer, date: dayKey(w.date), cardId: w.cardId,
+    });
+    oldCid = e.cardId;
+    e[field] = val;
+    if (e.signer === w.signer && e.date === dayKey(w.date) && e.cardId === w.cardId) delete d.edits[rowId];
+  }
+  unapprove(d, oldCid);
+  if (field === 'cardId') unapprove(d, val);
+  tidy(key);
+}
+
+function deleteRow(key, rowId) {
+  const d = draftFor(key);
+  const i = d.adds.findIndex(a => a.tmp === rowId);
+  if (i >= 0) {
+    unapprove(d, d.adds[i].cardId);
+    d.adds.splice(i, 1);
+  } else {
+    const w = baseById.get(rowId);
+    if (!w) return;
+    unapprove(d, d.edits[rowId]?.cardId || w.cardId);
+    d.deletes[rowId] = { signer: w.signer, date: w.date, cardId: w.cardId };
+    delete d.edits[rowId];
+  }
+  tidy(key);
+}
+
+function deleteCard(key, cid) {
+  view(key).filter(r => r.cardId === cid).forEach(r => deleteRow(key, r.id));
+  const d = draftFor(key);
+  delete d.status[cid];
+  tidy(key);
+}
+
+function addSignature(key, cid) {
+  const card = cardsOf(key).find(c => c.cid === cid);
+  const last = card ? card.sigs[card.sigs.length - 1].date : '';
+  const tmp = 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const d = draftFor(key);
+  d.adds.push({ tmp, signer: '', date: last, cardId: cid });
+  unapprove(d, cid);
+  tidy(key);
+  return tmp;
+}
+
+// Approve or reject a card; picking the same one again clears it
+function setStatus(key, cid, want) {
+  const card = cardsOf(key).find(c => c.cid === cid);
+  if (!card) return;
+  const d = draftFor(key);
+  const next = card.status === want ? null : want;
+  popCid = cid;
+  if (next === 'approved' && card.savedOk) delete d.status[cid];
+  else if (next === null) {
+    if (card.savedOk) d.status[cid] = 'unreviewed';
+    else delete d.status[cid];
+  } else d.status[cid] = next;
+  tidy(key);
+}
+
+// The next unused card ID for a color and value ("New card")
+function nextCid(key) {
+  const p = prefixFor(key);
+  const used = new Set(base.filter(w => w.cardId.startsWith(p)).map(w => w.cardId));
+  view(key).forEach(r => used.add(r.cardId));
+  for (const ch of SUFFIX_SEQ) if (!used.has(p + ch)) return p + ch;
+  return p + '?';
+}
+
+// ── Rendering ──────────────────────────────────────────────────────────────
+function render() {
+  if (!link) return;
+  const keys = categoryKeys();
+  const sums = new Map(keys.map(k => [k, summarize(k)]));
+  if (!selKey || !sums.has(selKey)) selKey = keys.find(k => sums.get(k).cards.length && !sums.get(k).done) || keys[0];
+  const content = document.getElementById('content');
+  if (!document.getElementById('mainPanel')) {
+    content.innerHTML = `
+      <div class="progress-block" id="progress"></div>
+      <div class="audit-layout">
+        <nav class="sidebar" aria-label="Cards by color and value">
+          <div class="sidebar-header"><span>Cards</span><span class="count" id="doneCount"></span></div>
+          <div class="cat-list" id="catList"></div>
+        </nav>
+        <section class="main" id="mainPanel" aria-live="polite"></section>
+      </div>`;
+  }
+  renderProgress(sums);
+  renderList(keys, sums);
+  renderMain(sums.get(selKey));
+  if (openCid) renderCardDialog();
+  popCid = null;
+}
+
+function renderProgress(sums) {
+  const byColor = new Map();
+  sums.forEach(s => {
+    const color = splitKey(s.key)[0];
+    const c = byColor.get(color) || { total: 0, done: 0 };
+    c.total += s.sigs; c.done += s.reviewed;
+    byColor.set(color, c);
+  });
+  let total = 0, done = 0;
+  byColor.forEach(c => { total += c.total; done += c.done; });
+  const segs = [...byColor].filter(([, c]) => c.total).map(([color, c]) =>
+    `<div class="seg suit" style="flex:${c.total} 1 0;${suitStyle(color)}" title="${esc(color)}: ${c.done.toLocaleString()} of ${c.total.toLocaleString()} reviewed">
+      <div class="seg-fill" style="width:${(100 * c.done / c.total).toFixed(2)}%"></div></div>`).join('');
+  const legend = [...byColor].filter(([, c]) => c.total).map(([color, c]) =>
+    `<span><span class="dot suit" style="${suitStyle(color)}"></span>${esc(color)} ${c.done.toLocaleString()}/${c.total.toLocaleString()}</span>`).join('');
+  document.getElementById('progress').innerHTML = `
+    <div class="progress" role="progressbar" aria-label="Signatures reviewed" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done}">${segs}</div>
+    <p class="progress-text"><span><strong>${(total - done).toLocaleString()} / ${total.toLocaleString()}</strong> signatures left to review</span>
+      <span class="legend">${legend}</span></p>`;
+}
+
+function renderList(keys, sums) {
+  let html = '', color = null, doneCats = 0, allCats = 0;
+  keys.forEach(k => {
+    const s = sums.get(k);
+    const [c] = splitKey(k);
+    if (c !== color) {
+      color = c;
+      const mine = keys.filter(x => splitKey(x)[0] === c).map(x => sums.get(x)).filter(x => x.cards.length);
+      html += `<div class="color-head"><span class="dot suit" style="${suitStyle(c)}"></span>${esc(c)}
+        <span class="count">${mine.filter(x => x.done && !x.draft).length}/${mine.length}</span></div>`;
+    }
+    if (s.cards.length) { allCats++; if (s.done && !s.draft) doneCats++; }
+    const badges = [
+      s.draft ? `<span class="unsaved" title="Unsaved changes in this browser"></span>` : '',
+      s.over || s.flagged ? `<span class="ic warn" title="${esc(s.over ? `More cards than the deck has` : `${plural(s.flagged, 'card')} to check`)}">${I.warn}</span>` : '',
+      s.rejected ? `<span class="ic bad" title="${esc(plural(s.rejected, 'rejected card'))}">${I.x}</span>` : '',
+      s.done ? `<span class="ic ok" title="Every card approved">${I.check}</span>` : '',
+    ].join('');
+    html += `<button type="button" class="cat-row suit${s.done && !s.draft ? ' is-done' : ''}" style="${suitStyle(c)}" data-key="${esc(k)}"
+        ${k === selKey ? 'aria-current="true"' : ''} tabindex="${k === selKey ? 0 : -1}">
+      <span class="cat-name">${esc(splitKey(k)[1])}</span>
+      <span class="cat-count">${s.cards.length ? plural(s.cards.length, 'card') : '—'}</span>
+      <span class="badges">${badges}</span>
+    </button>`;
+  });
+  const list = document.getElementById('catList');
+  const scroll = list.scrollTop;
+  list.innerHTML = html;
+  list.scrollTop = scroll;
+  document.getElementById('doneCount').textContent = `${doneCats}/${allCats} done`;
+}
+
+function selectCategory(k, focus) {
+  if (k === selKey) return;
+  selKey = k;
+  render();
+  const row = [...document.querySelectorAll('.cat-row')].find(r => r.dataset.key === k);
+  if (row) {
+    const list = document.getElementById('catList');
+    const top = row.offsetTop - 30, bottom = row.offsetTop + row.offsetHeight;
+    if (top < list.scrollTop) list.scrollTop = top;
+    else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
+    if (focus) row.focus();
+  }
+}
+
+function cardTile(key, c, i) {
+  const [, value] = splitKey(key);
+  const counts = {};
+  c.sigs.forEach(s => { const n = s.signer.trim() || '(no name)'; counts[n] = (counts[n] || 0) + 1; });
+  const names = Object.keys(counts).sort((a, b) => a.localeCompare(b));
+  const first = c.first.trim() || '(no name)';
+  const MAX = 12;
+  let body = names.slice(0, MAX).map(n => `<div class="sn">
+      <span class="star"${n === first ? ' title="First to sign"' : ''}>${n === first ? '★' : ''}</span>
+      <span class="name">${esc(n)}</span><span class="mult">${counts[n] > 1 ? `×${counts[n]}` : ''}</span></div>`).join('');
+  if (names.length > MAX) body += `<div class="sn more"><span class="star"></span><span class="name">+${names.length - MAX} more</span><span class="mult"></span></div>`;
+  const problems = c.errors.concat(c.warnings);
+  const pop = c.cid === popCid ? ' pop' : '';
+  const chips = [
+    problems.length ? `<span class="chip-ic warn" title="${esc(problems.join('\n'))}">${I.warn}</span>` : '',
+    c.status === 'rejected' ? `<span class="chip-ic bad${pop}" title="Rejected: needs fixing">${I.x}</span>` : '',
+    c.status === 'approved' ? `<span class="chip-ic ok${pop}" title="Approved">${I.check}</span>` : '',
+  ].join('');
+  const title = `${catName(key)} · ${cardLabel(c.cid)} (${c.cid})${c.stale ? ' · changed since it was approved' : ''}`;
+  return `<div class="card-wrap" data-cid="${esc(c.cid)}" style="animation-delay:${Math.min(i, 16) * 15}ms">
+    <div class="card-lift">
+      <button type="button" class="uno-card suit${c.status ? ' st-' + c.status : ''}" style="${suitStyle(splitKey(key)[0])}" data-open="${esc(c.cid)}" title="${esc(title)}">
+        <div class="card-head">
+          <div class="card-meta"><span>${esc(cardLabel(c.cid))}</span><span>${c.sigs.length} total</span></div>
+          <div class="cval">${esc(value)}</div>
+        </div>
+        <div class="card-body">${body}</div>
+      </button>
+      <div class="card-chips">${chips}</div>
+    </div>
+    <div class="card-actions">
+      <button type="button" class="act approve" data-status="approved" aria-pressed="${c.status === 'approved'}" title="Approve: it’s right" aria-label="Approve ${esc(cardLabel(c.cid))}">${I.check}</button>
+      <button type="button" class="act reject" data-status="rejected" aria-pressed="${c.status === 'rejected'}" title="Reject: needs fixing" aria-label="Reject ${esc(cardLabel(c.cid))}">${I.x}</button>
+    </div>
+  </div>`;
+}
+
+function renderMain(s) {
+  const panel = document.getElementById('mainPanel');
+  const key = s.key, name = catName(key);
+  const [color] = splitKey(key);
+  const changed = key !== shownKey;
+  shownKey = key;
+
+  let grid = '';
+  if (!s.cards.length) {
+    grid = `<p class="empty">No signed ${esc(name)} cards yet.</p>`;
+  } else if (groupByFirst) {
+    const groups = new Map();
+    s.cards.forEach(c => {
+      const f = c.first.trim() || '(no name)';
+      if (!groups.has(f)) groups.set(f, []);
+      groups.get(f).push(c);
+    });
+    let i = 0;
+    grid = [...groups.keys()].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })).map(f =>
+      `<section class="group"><h3 class="group-head">${esc(possessive(f))} cards<span class="count">· ${groups.get(f).length}</span></h3>
+        <div class="cards-grid">${groups.get(f).map(c => cardTile(key, c, i++)).join('')}</div></section>`).join('');
+  } else {
+    grid = `<div class="cards-grid">${s.cards.map((c, i) => cardTile(key, c, i)).join('')}</div>`;
+  }
+
+  const left = [
+    s.todo ? `${s.todo} to review` : '',
+    s.rejected ? `${s.rejected} rejected` : '',
+    s.errors ? `${plural(s.errors, 'card')} missing a name or date` : '',
+  ].filter(Boolean).join(' · ');
+  let hint, hintCls = '';
+  if (!s.cards.length) hint = '';
+  else if (s.done && !s.draft && !s.errors) { hint = 'Done. Every card is approved and saved to the sheet.'; hintCls = 'ok'; }
+  else if (s.ready) hint = 'Every card is approved. Mark it done to save your changes to the sheet.';
+  else hint = left + (s.draft ? '. Your changes are kept in this browser until you mark it done.' : '');
+
+  const over = s.over ? `<div class="note">${I.warn}<span>${plural(s.cards.length, 'card')} logged, but the ${esc(DECKS[activeDeck].name)} deck only has
+      ${s.copies} ${esc(name)}s (${perPack(...splitKey(key))} per pack × ${DECKS[activeDeck].packs} packs).</span></div>` : '';
+  const cardWord = n => n === 1 ? 'card' : 'cards';
+
+  panel.innerHTML = `
+    <div class="detail-title suit" style="${suitStyle(color)}">
+      <h2>${esc(name)}</h2>
+      <span class="sub">${plural(s.cards.length, 'card')} · ${plural(s.sigs, 'signature')}${s.copies ? ` · the deck has ${s.copies}` : ''}</span>
+    </div>
+    ${over}
+    ${s.cards.length ? `<div class="toolbar">
+      <label class="check"><input type="checkbox" id="groupFirst"${groupByFirst ? ' checked' : ''}> Group by first signer</label>
+      <span class="spacer"></span>
+      ${s.rejected ? `<button type="button" class="btn btn-danger" id="delRejected">${I.trash}Delete ${s.rejected} rejected ${esc(name)} ${cardWord(s.rejected)}</button>` : ''}
+      ${s.draft ? `<button type="button" class="btn" id="discard">Discard changes</button>` : ''}
+      ${s.done && !s.draft && !s.errors ? '' : `<button type="button" class="btn btn-primary" id="markDone" aria-disabled="${!s.ready || saving}">${saving ? 'Saving…' : `Mark ${esc(name)} done`}</button>`}
+    </div>` : ''}
+    <p class="status-msg ${hintCls}" id="doneMsg" role="status">${esc(hint)}</p>
+    <div id="cardArea">${grid}</div>`;
+  if (changed) {
+    panel.querySelectorAll('.cards-grid').forEach(g => g.classList.add('enter'));
+    panel.classList.remove('enter'); void panel.offsetWidth; panel.classList.add('enter');
+  }
+}
+
+// ── Card dialog ────────────────────────────────────────────────────────────
+function openCard(cid) {
+  openCid = cid;
+  renderCardDialog();
+  const dlg = document.getElementById('cardDlg');
+  if (!dlg.open) dlg.showModal();
+}
+
+function renderCardDialog() {
+  const dlg = document.getElementById('cardDlg');
+  const key = selKey;
+  const cards = cardsOf(key);
+  const c = cards.find(x => x.cid === openCid);
+  if (!c) { openCid = null; if (dlg.open) dlg.close(); return; }
+  const [color, value] = splitKey(key);
+  // Keep focus on the same field after a redraw
+  const act = document.activeElement;
+  const keep = act && dlg.contains(act) ? { row: act.closest('tr')?.dataset.row, f: act.dataset.f, id: act.id } : null;
+
+  const options = cards.slice().sort((a, b) => suffixIndex(a.cid) - suffixIndex(b.cid));
+  const rows = c.sigs.map(s => {
+    const opts = options.map(o => `<option value="${esc(o.cid)}"${o.cid === s.cardId ? ' selected' : ''}>${esc(cardLabel(o.cid))}</option>`).join('')
+      + `<option value="__new">New card</option>`;
+    const missing = !s.signer.trim() || s.signer.trim() === '?';
+    return `<tr data-row="${esc(s.id)}" class="${c.dupDays.has(s.date) ? 'dup ' : ''}${s.changed ? 'changed' : ''}">
+      <td class="num">${s.added ? 'new' : '#' + esc(s.id)}</td>
+      <td><input type="text" data-f="signer" list="signerList" value="${esc(s.signer)}" aria-label="Signer" autocomplete="off" autocapitalize="words"${missing ? ' class="missing"' : ''}></td>
+      <td><input type="date" data-f="date" value="${esc(s.date)}" aria-label="Date"${s.date ? '' : ' class="missing"'}></td>
+      <td><select data-f="cardId" aria-label="Card">${opts}</select></td>
+      <td><button type="button" class="icon-btn" data-del title="Delete this signature" aria-label="Delete this signature">${I.trash}</button></td>
+    </tr>`;
+  }).join('');
+  const problems = c.errors.concat(c.warnings);
+  document.getElementById('cardDlgBody').innerHTML = `
+    <div class="dlg-head suit" style="${suitStyle(color)}">
+      <div>
+        <p class="kick">${esc(color)} ${esc(value)}</p>
+        <h2 id="cardDlgTitle">${esc(cardLabel(c.cid))}<span class="cid mono">${esc(c.cid)}</span></h2>
+        <div class="chips">${c.status === 'approved' ? `<span class="ic ok">${I.check}</span>` : c.status === 'rejected' ? `<span class="ic bad">${I.x}</span>` : ''}</div>
+      </div>
+      <button type="button" class="btn btn-sm dlg-close" data-close aria-label="Close">${I.close}</button>
+    </div>
+    ${problems.length ? `<ul class="flag-list">${problems.map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}
+    ${c.stale ? `<p class="muted-note">This card was approved before, but its signatures have changed since.</p>` : ''}
+    <div class="table-wrap"><table class="sig-table">
+      <thead><tr><th>Win</th><th>Signer</th><th>Date</th><th>Card</th><th><span hidden>Delete</span></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <div class="dlg-foot">
+      <button type="button" class="btn btn-sm" id="addSig">${I.plus}Add signature</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn btn-sm btn-danger" id="delCard">${I.trash}Delete card</button>
+      <button type="button" class="btn btn-sm st-reject" id="rejectCard" aria-pressed="${c.status === 'rejected'}">${I.x}Reject</button>
+      <button type="button" class="btn btn-sm st-approve" id="approveCard" aria-pressed="${c.status === 'approved'}">${I.check}Approve</button>
+    </div>`;
+  if (keep) {
+    const el = keep.id ? document.getElementById(keep.id)
+      : dlg.querySelector(`tr[data-row="${CSS.escape(keep.row || '')}"] [data-f="${keep.f}"]`);
+    el?.focus();
+  }
+}
+
+// Two clicks to delete: the first turns the button into "Confirm?", the second does it
+function confirmClick(btn, label) {
+  if (btn.classList.contains('armed')) return true;
+  const html = btn.innerHTML;
+  btn.classList.add('armed');
+  btn.textContent = label;
+  const reset = () => { btn.classList.remove('armed'); btn.innerHTML = html; };
+  const t = setTimeout(reset, 3000);
+  btn.addEventListener('blur', () => { clearTimeout(t); reset(); }, { once: true });
+  return false;
+}
+
+function onDialogChange(e) {
+  const el = e.target, row = el.closest('tr')?.dataset.row;
+  if (!openCid || !row || !el.dataset.f) return;
+  let val = el.value;
+  if (el.dataset.f === 'signer') val = val.trim();
+  if (el.dataset.f === 'cardId' && val === '__new') val = nextCid(selKey);
+  setField(selKey, row, el.dataset.f, val);
+  if (el.dataset.f === 'cardId' && val !== openCid) showToast(`Moved ${row.startsWith('n') ? 'the new signature' : '#' + row} to ${cardLabel(val)}.`);
+  render();
+}
+
+function onDialogClick(e) {
+  const dlg = document.getElementById('cardDlg');
+  if (e.target === dlg) { dlg.close(); return; }
+  const b = e.target.closest('button');
+  if (!b) return;
+  const key = selKey;
+  if (b.hasAttribute('data-close') || !openCid) { dlg.close(); return; }
+  if (b.hasAttribute('data-del')) {
+    if (!confirmClick(b, 'Delete?')) return;
+    deleteRow(key, b.closest('tr').dataset.row);
+  } else if (b.id === 'addSig') {
+    const tmp = addSignature(key, openCid);
+    render();
+    dlg.querySelector(`tr[data-row="${tmp}"] [data-f="signer"]`)?.focus();
+    return;
+  } else if (b.id === 'delCard') {
+    const n = cardsOf(key).find(c => c.cid === openCid)?.sigs.length || 0;
+    if (!confirmClick(b, `Delete ${plural(n, 'signature')}?`)) return;
+    const label = cardLabel(openCid);
+    deleteCard(key, openCid);
+    showToast(`Deleted ${label}. It leaves the sheet when you mark ${catName(key)} done.`);
+  } else if (b.id === 'approveCard' || b.id === 'rejectCard') {
+    setStatus(key, openCid, b.id === 'approveCard' ? 'approved' : 'rejected');
+  } else return;
+  render();
+}
+
+// ── Confirm dialog ─────────────────────────────────────────────────────────
+function askConfirm(title, text, okLabel) {
+  const dlg = document.getElementById('confirmDlg');
+  document.getElementById('confirmBody').innerHTML = `
+    <h2 id="confirmTitle">${esc(title)}</h2>
+    <p class="muted-note">${esc(text)}</p>
+    <div class="dlg-foot"><span class="spacer"></span>
+      <button type="button" class="btn" value="no">Cancel</button>
+      <button type="button" class="btn btn-primary" value="yes">${esc(okLabel)}</button>
+    </div>`;
+  return new Promise(resolve => {
+    const done = v => { dlg.close(); resolve(v); };
+    dlg.querySelectorAll('button').forEach(b => b.addEventListener('click', () => done(b.value === 'yes')));
+    dlg.addEventListener('close', () => resolve(false), { once: true });
+    dlg.showModal();
+    dlg.querySelector('button[value="no"]').focus();
+  });
+}
+
+async function deleteRejected() {
+  const key = selKey, name = catName(key);
+  const rejected = cardsOf(key).filter(c => c.status === 'rejected');
+  if (!rejected.length) return;
+  const sigs = rejected.reduce((n, c) => n + c.sigs.length, 0);
+  const cards = rejected.length === 1 ? 'card' : 'cards';
+  const ok = await askConfirm(
+    `Delete ${rejected.length} rejected ${name} ${cards}?`,
+    `This removes ${plural(sigs, 'signature')} (${rejected.map(c => cardLabel(c.cid)).join(', ')}). The wins leave the sheet when you mark ${name} done.`,
+    `Delete ${rejected.length} ${cards}`);
+  if (!ok) return;
+  rejected.forEach(c => deleteCard(key, c.cid));
+  showToast(`Deleted ${rejected.length} rejected ${name} ${cards}.`);
+  render();
+}
+
+// ── Saving ─────────────────────────────────────────────────────────────────
+async function markDone() {
+  const key = selKey, name = catName(key);
+  const s = summarize(key);
+  if (saving) return;
+  if (!s.ready) {
+    const msg = document.getElementById('doneMsg');
+    msg.className = 'status-msg err';
+    msg.textContent = `Before ${name} is done: ${[s.todo ? `${s.todo} to review` : '', s.rejected ? `${s.rejected} rejected` : '', s.errors ? `${plural(s.errors, 'card')} missing a name or date` : ''].filter(Boolean).join(' · ')}.`;
+    return;
+  }
+  const d = drafts[key] || { edits: {}, adds: [], deletes: {}, status: {} };
+  const ops = [
+    ...Object.entries(d.edits).map(([id, e]) => ({ op: 'edit', id, before: e.before, signer: e.signer.trim(), date: keyToMdy(e.date), cardId: e.cardId })),
+    ...d.adds.map(a => ({ op: 'add', signer: a.signer.trim(), date: keyToMdy(a.date), cardId: a.cardId })),
+    ...Object.entries(d.deletes).map(([id, b]) => ({ op: 'delete', id, before: b })),
+  ];
+  const [color, value] = splitKey(key);
+  saving = true;
+  setSync('Saving…');
+  render();
+  try {
+    const res = await api('auditCommit', { color, value, ops, approve: s.cards.map(c => c.cid) });
+    delete drafts[key];
+    saveDrafts();
+    setBase(res);
+    showToast(`${name} is done.`);
+    saving = false;
+    const keys = categoryKeys();
+    const after = keys.slice(keys.indexOf(key) + 1).concat(keys.slice(0, keys.indexOf(key)));
+    selKey = after.find(k => { const x = summarize(k); return x.cards.length && !(x.done && !x.draft); }) || key;
+    saveSel();
+  } catch (e) {
+    saving = false;
+    if (e instanceof LinkError) { setSync(''); return; }
+    if (e.message === 'conflict') {
+      let dropped = [];
+      try { dropped = setBase(await api('auditOpen')); } catch (e2) {}
+      if (!dropped.length) showToast(`${ERROR_TEXT.conflict} Check ${name} again, then mark it done.`);
+    } else {
+      showToast(`${name} didn’t save. ${ERROR_TEXT[e.message] || ERROR_TEXT.server} Your changes are still here.`);
+    }
+  }
+  setSync('');
+  render();
+  if (!document.getElementById('cardDlg').open) document.getElementById('mainPanel').scrollIntoView({ block: 'nearest' });
+}
+
+function setSync(text) {
+  const el = document.getElementById('syncStatus');
+  el.hidden = !text;
+  el.textContent = text;
+}
+
+// ── Header, gates, toast, help ─────────────────────────────────────────────
+function updateHeader() {
+  const deck = link && DECKS[link.deck];
+  document.getElementById('kicker').textContent = deck ? `Spicy Uno · ${deck.name}` : 'Spicy Uno';
+  document.getElementById('intro').textContent = deck
+    ? `Check every ${deck.name} card's signatures, fix what's wrong, and approve it.` +
+      (link.expires ? ` This link works until ${link.expires.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}.` : '')
+    : "Check every card's signatures and approve it.";
+}
+
+const GATES = {
+  none:           ['This page opens from a link', 'Ask for an audit link to the deck you are checking.'],
+  expired:        ['This link has expired', "Audit links work for a week after they're first opened. Ask for a new one. Changes you hadn't marked done are still saved in this browser."],
+  'invalid-link': ["This link doesn't work", 'Check that you copied the whole link, or ask for a new one.'],
+  network:        ["Couldn't reach the sheet", 'Check your connection and try again.'],
+};
+function showGate(kind) {
+  const [title, text] = GATES[kind] || GATES.network;
+  link = null;
+  base = [];
+  openCid = null;
+  document.querySelectorAll('dialog[open]').forEach(d => d.close());
+  updateHeader();
+  document.getElementById('content').innerHTML = `
+    <div class="empty-state"><strong>${esc(title)}</strong>${esc(text)}
+      ${kind === 'network' ? '<div style="margin-top:16px"><button type="button" class="btn btn-primary" onclick="location.reload()">Try again</button></div>' : ''}
+    </div>`;
+}
+
+let toastTimer = null, toastHideTimer = null;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  clearTimeout(toastHideTimer);
+  t.classList.remove('leaving');
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    t.classList.add('leaving');
+    toastHideTimer = setTimeout(() => { t.hidden = true; t.classList.remove('leaving'); }, 150);
+  }, 6000);
+}
+
+function openHelp() {
+  const dlg = document.getElementById('helpDlg');
+  if (dlg.open) return;
+  document.getElementById('helpBody').innerHTML = `
+    <div class="dlg-head"><h2 id="helpTitle">How the audit works</h2>
+      <button type="button" class="btn btn-sm dlg-close" data-close aria-label="Close">${I.close}</button></div>
+    <ol>
+      <li><strong>Pick a color and value</strong> on the left.</li>
+      <li><strong>Open a card</strong> to see every signature in order. Fix a name or date, move a signature to another card, add one that's missing, or delete one that never happened.</li>
+      <li><strong>Approve</strong> ${I.check} a card when it's right, or <strong>reject</strong> it when it needs fixing. Hover a card for both buttons. Rejected cards drop to the end, then approved ones.</li>
+      <li><strong>Mark done</strong> once every card is approved. That saves the color and value to the sheet.</li>
+    </ol>
+    <h3>Good to know</h3>
+    <ul>
+      <li>Until you mark it done, changes are kept in this browser only. A red dot in the list means unsaved changes.</li>
+      <li>${I.warn} marks things to check: two signatures on the same day, a card ID that doesn't fit, or more cards than the deck has.</li>
+      <li>Deleted signatures and cards are removed from the sheet when you mark done. Their win numbers are left as gaps.</li>
+    </ul>`;
+  dlg.querySelector('[data-close]').addEventListener('click', () => dlg.close());
+  dlg.querySelectorAll('.lucide').forEach(s => { s.style.width = s.style.height = '16px'; s.style.verticalAlign = '-3px'; });
+  dlg.showModal();
+}
+
+// Remember the open color and value and the grouping in this browser
+const selStore = () => 'spicyUnoAuditSel_' + linkCode;
+function saveSel() { try { localStorage.setItem(selStore(), selKey || ''); } catch (e) {} }
+
+// ── Events ─────────────────────────────────────────────────────────────────
+function wire() {
+  const content = document.getElementById('content');
+  content.addEventListener('click', e => {
+    const row = e.target.closest('.cat-row');
+    if (row) { selectCategory(row.dataset.key); saveSel(); if (matchMedia('(max-width: 760px)').matches) document.getElementById('mainPanel').scrollIntoView({ behavior: 'smooth' }); return; }
+    const act = e.target.closest('.act');
+    if (act) {
+      const cid = act.closest('.card-wrap').dataset.cid;
+      setStatus(selKey, cid, act.dataset.status);
+      render();
+      // The card moves; keep keyboard focus on its buttons
+      const again = [...document.querySelectorAll('.card-wrap')].find(w => w.dataset.cid === cid);
+      if (document.activeElement === document.body) again?.querySelector(`.act[data-status="${act.dataset.status}"]`)?.focus({ preventScroll: true });
+      return;
+    }
+    const card = e.target.closest('[data-open]');
+    if (card) { openCard(card.dataset.open); return; }
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.id === 'markDone') markDone();
+    else if (b.id === 'delRejected') deleteRejected();
+    else if (b.id === 'discard') {
+      if (!confirmClick(b, 'Discard all changes?')) return;
+      delete drafts[selKey];
+      saveDrafts();
+      showToast(`Discarded your ${catName(selKey)} changes.`);
+      render();
+    }
+  });
+  content.addEventListener('change', e => {
+    if (e.target.id !== 'groupFirst') return;
+    groupByFirst = e.target.checked;
+    try { localStorage.setItem('spicyUnoAuditGroup', groupByFirst ? '1' : ''); } catch (err) {}
+    shownKey = null;
+    render();
+  });
+  // ↑/↓ moves through the list
+  content.addEventListener('keydown', e => {
+    const row = e.target.closest?.('.cat-row');
+    if (!row || (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')) return;
+    e.preventDefault();
+    const rows = [...document.querySelectorAll('.cat-row')];
+    const next = rows[rows.indexOf(row) + (e.key === 'ArrowDown' ? 1 : -1)];
+    if (next) { selectCategory(next.dataset.key, true); saveSel(); }
+  });
+
+  const dlg = document.getElementById('cardDlg');
+  dlg.addEventListener('change', onDialogChange);
+  dlg.addEventListener('click', onDialogClick);
+  dlg.addEventListener('close', () => { openCid = null; });
+  // Enter in a name box saves it (blur fires change)
+  dlg.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.matches('input[data-f="signer"]')) { e.preventDefault(); e.target.blur(); }
+  });
+
+  ['helpDlg', 'confirmDlg'].forEach(id => document.getElementById(id).addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); }));
+  document.getElementById('helpBtn').addEventListener('click', openHelp);
+  document.addEventListener('keydown', e => {
+    const tag = document.activeElement?.tagName;
+    if (e.key === '?' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) && !e.metaKey && !e.ctrlKey) { e.preventDefault(); openHelp(); }
+  });
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+(function init() {
+  wire();
+  linkCode = (/^#([A-Za-z0-9]{12})$/.exec(location.hash) || [])[1] || '';
+  if (!linkCode) { showGate('none'); return; }
+  loadDrafts();
+  try {
+    selKey = localStorage.getItem(selStore()) || null;
+    groupByFirst = localStorage.getItem('spicyUnoAuditGroup') === '1';
+  } catch (e) {}
+  document.getElementById('content').innerHTML = '<div class="empty-state"><strong>Opening your link…</strong>Loading every signature in the deck.</div>';
+  api('auditOpen')
+    .then(res => { setBase(res); render(); })
+    .catch(e => { if (!(e instanceof LinkError)) showGate('network'); });
+  setInterval(() => { if (link?.expires && Date.now() > link.expires) showGate('expired'); }, 30000);
+  window.addEventListener('hashchange', () => location.reload());
+  window.addEventListener('beforeunload', e => { if (saving) { e.preventDefault(); e.returnValue = ''; } });
+})();
+</script>
+</body>
+</html>

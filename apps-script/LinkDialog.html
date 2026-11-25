@@ -49,6 +49,12 @@
   </div>
   <p class="err" id="error"></p>
 
+  <h2>Audit link</h2>
+  <div class="row" style="margin-top:0">
+    <button id="audit" disabled>Make audit link</button>
+    <span class="muted">Review and fix every card in the deck above. Works for 7 days from when it's first opened.</span>
+  </div>
+
   <div id="madeBox" hidden>
     <h2>Just made</h2>
     <div class="list scroll" id="made"></div>
@@ -81,6 +87,7 @@
   function fail(e) {
     $('error').textContent = e.message || String(e);
     $('create').disabled = false;
+    $('audit').disabled = false;
   }
 
   // Fill From/To with the selected deck's defaults
@@ -143,6 +150,19 @@
       .createShareLinks($('deck').value, $('from').value, $('to').value, mode() === 'perDay', $('skip').checked);
   };
 
+  $('audit').onclick = function () {
+    $('error').textContent = '';
+    $('audit').disabled = true;
+    google.script.run
+      .withSuccessHandler(function (res) {
+        $('audit').disabled = false;
+        renderMade(res);
+        renderActive(res.active);
+      })
+      .withFailureHandler(fail)
+      .createAuditLink($('deck').value);
+  };
+
   $('copyAll').onclick = function () {
     copy(lastMade.map(function (l) {
       return lastMade.length > 1 ? l.label + ' — ' + l.url : l.url;
@@ -158,6 +178,7 @@
       applyDefaults();
       renderActive(d.active);
       $('create').disabled = false;
+      $('audit').disabled = false;
     })
     .withFailureHandler(fail)
     .dialogData();
