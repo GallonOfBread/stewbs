@@ -57,6 +57,7 @@
   .btn.armed { background: var(--accent); color: #fff; }
   .btn.st-approve[aria-pressed="true"] { background: var(--ok); color: var(--bg); }
   .btn.st-reject[aria-pressed="true"]  { background: var(--accent); color: #fff; }
+  .btn.st-retire[aria-pressed="true"]  { background: var(--muted); color: var(--bg); }
 
   .status-msg { font-size: 0.9rem; color: var(--muted); margin: 0; }
   .status-msg.ok  { color: var(--ok); }
@@ -69,6 +70,14 @@
   .seg-fill { height: 100%; background: var(--suit); transition: width .4s ease-out; }
   .progress-text { margin: 10px 0 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; }
   .progress-text strong { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+  .flag-jump {
+    display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; border: none; cursor: pointer;
+    font: 600 0.9rem var(--font); font-variant-numeric: tabular-nums;
+    color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--bg));
+  }
+  .flag-jump:hover { background: color-mix(in srgb, var(--warn) 20%, var(--bg)); }
+  .flag-jump.none { color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, var(--bg)); cursor: default; }
+  .flag-jump .lucide { width: 16px; height: 16px; }
   .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
   .legend span { display: inline-flex; align-items: center; gap: 5px; }
 
@@ -106,6 +115,7 @@
   .ic { display: inline-flex; }
   .ic .lucide { width: 16px; height: 16px; }
   .ic.ok { color: var(--ok); } .ic.bad { color: var(--accent); } .ic.warn { color: var(--warn); }
+  .ic.gone { color: var(--muted); align-items: center; gap: 4px; font-size: 0.85rem; font-weight: 600; }
   .unsaved { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin: 0 4px; }
 
   /* ---------- Main panel ---------- */
@@ -148,6 +158,19 @@
   .sn.more .name { color: var(--muted); }
   .uno-card.st-approved { opacity: .62; }
   .uno-card.st-rejected { border-style: dashed; }
+  .uno-card.st-retired { opacity: .5; filter: grayscale(.85); }
+  .retired-box { margin-top: 22px; border-top: 1px solid var(--line); padding-top: 12px; }
+  .retired-box summary {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap; cursor: pointer; list-style: none;
+    font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+  }
+  .retired-box summary::-webkit-details-marker { display: none; }
+  .retired-box summary::after { content: '▸'; letter-spacing: 0; transition: transform .15s; }
+  .retired-box[open] summary::after { transform: rotate(90deg); }
+  .retired-box summary .count { color: var(--text); letter-spacing: 0; }
+  .retired-box summary .sub { font-weight: 400; letter-spacing: 0; text-transform: none; font-size: 0.85rem; margin-right: 4px; }
+  .retired-box summary .lucide { width: 16px; height: 16px; }
+  .retired-box .cards-grid { margin-top: 6px; }
 
   /* Status chips sit on the card's top corner */
   .card-chips { position: absolute; top: -8px; right: -8px; z-index: 2; display: flex; gap: 3px; }
@@ -156,7 +179,7 @@
     background: var(--bg); box-shadow: 0 1px 4px rgba(0,0,0,.3);
   }
   .chip-ic .lucide { width: 18px; height: 18px; }
-  .chip-ic.ok { color: var(--ok); } .chip-ic.bad { color: var(--accent); } .chip-ic.warn { color: var(--warn); }
+  .chip-ic.ok { color: var(--ok); } .chip-ic.bad { color: var(--accent); } .chip-ic.warn { color: var(--warn); } .chip-ic.gone { color: var(--muted); }
   .chip-ic.pop { animation: pop-in .25s cubic-bezier(.3,1.8,.6,1); }
 
   /* Approve / reject appear under a card on hover (always there on touch screens) */
@@ -172,9 +195,12 @@
   .act.approve[aria-pressed="true"] { background: var(--ok); color: var(--bg); }
   .act.reject[aria-pressed="true"]  { background: var(--accent); color: #fff; }
   .act:active { transform: scale(.92); }
-  .card-wrap:hover .card-lift, .card-wrap:focus-within .card-lift { transform: translateY(-4px) rotate(-1.2deg); }
-  .card-wrap:hover .uno-card, .card-wrap:focus-within .uno-card { box-shadow: 0 10px 22px rgba(0,0,0,.2); opacity: 1; }
-  .card-wrap:hover .card-actions, .card-wrap:focus-within .card-actions { opacity: 1; transform: none; }
+  .act.retire:hover { color: var(--text); }
+  .act.retire[aria-pressed="true"] { background: var(--muted); color: var(--bg); }
+  /* Keyboard focus lifts a card too, but a mouse click doesn't leave it lifted */
+  .card-wrap:hover .card-lift, .card-wrap:has(:focus-visible) .card-lift { transform: translateY(-4px) rotate(-1.2deg); }
+  .card-wrap:hover .uno-card, .card-wrap:has(:focus-visible) .uno-card { box-shadow: 0 10px 22px rgba(0,0,0,.2); opacity: 1; filter: none; }
+  .card-wrap:hover .card-actions, .card-wrap:has(:focus-visible) .card-actions { opacity: 1; transform: none; }
 
   /* ---------- Dialogs ---------- */
   .dlg {
@@ -324,8 +350,13 @@ const WILD_COLOR = '#7c7f87';
 //   7 packs: Matrix, #winning (from January), Gridfetti 4.0 (from next July)
 // A new deck needs an entry here, in DECKS in signatures.html, and in DECKS in Code.gs.
 const DECKS = {
-  gridfetti: { name: 'Gridfetti 3.0', scheme: '90s', colors: ['Gold', 'Pink', 'Purple', 'Teal', 'Wild'], packs: 5 },
-  matrix:    { name: 'Matrix',        scheme: '00s', colors: ['Blue', 'Green', 'Red', 'Yellow', 'Wild'], packs: 7 },
+  original:   { name: 'Original',      scheme: '00s', colors: ['Blue', 'Green', 'Red', 'Yellow', 'Wild'], packs: 2 },
+  gridfetti1: { name: 'Gridfetti 1.0', scheme: '90s', colors: ['Gold', 'Pink', 'Purple', 'Teal', 'Wild'], packs: 2 },
+  gridfetti2: { name: 'Gridfetti 2.0', scheme: '90s', colors: ['Gold', 'Pink', 'Purple', 'Teal', 'Wild'], packs: 5 },
+  harvest:    { name: 'Harvest',       scheme: '70s', colors: ['Banana', 'Berry', 'Orange', 'Plum', 'Wild'], packs: 5 },
+  discolight: { name: 'Discolight',    scheme: '80s', colors: ['Blue', 'Green', 'Orange', 'Purple', 'Wild'], packs: 5 },
+  gridfetti:  { name: 'Gridfetti 3.0', scheme: '90s', colors: ['Gold', 'Pink', 'Purple', 'Teal', 'Wild'], packs: 5 },
+  matrix:     { name: 'Matrix',        scheme: '00s', colors: ['Blue', 'Green', 'Red', 'Yellow', 'Wild'], packs: 7 },
 };
 const VALUES = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'Draw 2', 'Skip', 'Reverse'];
 const WILD_VALUES = ['Basic', 'Draw 4'];
@@ -344,6 +375,7 @@ const I = {
   trash: svg('<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>'),
   plus:  svg('<path d="M5 12h14"/><path d="M12 5v14"/>'),
   close: svg('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'),
+  retire: svg('<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>'),
 };
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -353,11 +385,11 @@ let activeDeck = 'matrix';
 let base = [];                // wins as the sheet has them
 let baseById = new Map();
 let baseByKey = new Map();    // "Blue|7" → wins
-let approvals = new Map();    // "Blue|7|B7_3" → fingerprint saved when approved
+let approvals = new Map();    // "Blue|7|B7_3" → { status: 'approved' | 'retired', fingerprint } as saved
 let expectedPrefix = new Map(); // "Blue|7" → "B7_"
 // Unsaved work, per color and value, kept in this browser until Mark done:
 // { edits: { id: { before, signer, date, cardId } }, adds: [{ tmp, signer, date, cardId }],
-//   deletes: { id: before }, status: { cardId: 'approved' | 'rejected' | 'unreviewed' } }
+//   deletes: { id: before }, status: { cardId: 'approved' | 'rejected' | 'retired' | 'unreviewed' } }
 let drafts = {};
 let selKey = null;
 let groupByFirst = false;
@@ -365,6 +397,7 @@ let openCid = null;           // card shown in the card dialog
 let saving = false;
 let shownKey = null;          // the category the main panel last showed
 let popCid = null;            // card whose status chip should pop in on the next draw
+let retiredOpen = false;      // the Retired section is expanded
 
 // ── Small helpers ──────────────────────────────────────────────────────────
 function esc(s) {
@@ -478,7 +511,8 @@ async function api(action, data) {
 // Take the sheet's wins and approvals, then drop any unsaved change to a win that changed underneath it
 function setBase(res) {
   base = res.wins;
-  approvals = new Map((res.approvals || []).map(a => [`${a.color}|${a.value}|${a.cardId}`, a.fingerprint]));
+  approvals = new Map((res.approvals || []).map(a =>
+    [`${a.color}|${a.value}|${a.cardId}`, { status: a.status || 'approved', fingerprint: a.fingerprint }]));
   baseById = new Map(base.map(w => [w.id, w]));
   baseByKey = new Map();
   base.forEach(w => {
@@ -582,15 +616,57 @@ function cardsOf(key) {
     if (!by.has(r.cardId)) by.set(r.cardId, []);
     by.get(r.cardId).push(r);
   });
-  const rank = { null: 0, rejected: 1, approved: 2 };
-  return [...by].map(([cid, sigs]) => {
+  const rank = { null: 0, rejected: 1, approved: 2, retired: 3 };
+  const cards = [...by].map(([cid, sigs]) => {
     sigs.sort(bySig);
     const saved = approvals.get(`${key}|${cid}`);
-    const savedOk = saved != null && saved === fingerprint(sigs);
+    const savedStatus = saved && saved.fingerprint === fingerprint(sigs) ? saved.status : null;
     const st = d && d.status[cid];
-    const status = st === 'approved' || st === 'rejected' ? st : st === 'unreviewed' ? null : savedOk ? 'approved' : null;
-    return { cid, sigs, status, savedOk, stale: saved != null && !savedOk, first: sigs[0].signer, ...checks(sigs, cid, prefix, color, value) };
-  }).sort((a, b) => rank[a.status] - rank[b.status] || b.sigs.length - a.sigs.length || suffixIndex(a.cid) - suffixIndex(b.cid));
+    const status = st === 'unreviewed' ? null : st || savedStatus;
+    return { cid, sigs, status, savedStatus, stale: saved && !savedStatus ? saved.status : null, first: sigs[0].signer, ...checks(sigs, cid, prefix, color, value) };
+  });
+  findGuesses(cards);
+  return cards.sort((a, b) => rank[a.status] - rank[b.status] || b.sigs.length - a.sigs.length || suffixIndex(a.cid) - suffixIndex(b.cid));
+}
+
+// Two possible worlds. A physical card shows who signed first (they mark it with a dot)
+// and the names on it, but not the order of the rest. When a signature turned card X into
+// a card that is also card Y plus one different name, the card in hand could have been
+// either one, so the log may have picked the wrong card. (Cards that looked identical
+// don't count: swapping them changes nothing.)
+function findGuesses(cards) {
+  const nm = s => s.signer.trim().toLowerCase();
+  const bag = sigs => { const m = new Map(); sigs.forEach(s => m.set(nm(s), (m.get(nm(s)) || 0) + 1)); return m; };
+  const minus = (a, b) => { const out = []; a.forEach((n, k) => { for (let i = b.get(k) || 0; i < n; i++) out.push(k); }); return out; };
+  // "Donnie, then Liz, Matthew, Olyvia": the first signer, then everyone else A–Z
+  const names = sigs => {
+    const rest = [...new Set(sigs.slice(1).map(t => t.signer.trim()))].filter(n => n !== sigs[0].signer.trim())
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    return rest.length ? `${sigs[0].signer.trim()}, then ${rest.join(', ')}` : sigs[0].signer.trim();
+  };
+  cards.forEach(c => { c.guessRows = new Set(); });
+  cards.forEach(x => {
+    for (let k = 1; k < x.sigs.length; k++) {
+      const s = x.sigs[k];
+      if (!s.date) continue;
+      const px = bag(x.sigs.slice(0, k));
+      cards.forEach(y => {
+        if (y === x || nm(y.sigs[0]) !== nm(x.sigs[0])) return;
+        const before = y.sigs.filter(t => bySig(t, s) < 0);
+        if (before.length !== k) return;
+        const py = bag(before);
+        const yOnly = minus(py, px), xOnly = minus(px, py);
+        if (yOnly.length !== 1 || xOnly.length !== 1 || yOnly[0] !== nm(s)) return;
+        const other = x.sigs.find(t => nm(t) === xOnly[0]).signer.trim();
+        const signer = s.signer.trim();
+        const day = formatDay(s.date);
+        const held = names(x.sigs.slice(0, k + 1));
+        x.guessRows.add(s.id);
+        x.warnings.push(`${possessive(signer)} signature on ${day} might really be ${possessive(other)} on ${cardLabel(y.cid)}. Either way the card would read ${held}.`);
+        y.warnings.push(`${other} signing this card might be the real signature on ${day}, not ${signer} signing ${cardLabel(x.cid)}. Either way the card would read ${held}.`);
+      });
+    }
+  });
 }
 
 // Automatic checks. Errors have to be fixed before Mark done; warnings are things to look at.
@@ -615,19 +691,20 @@ function copiesOf(key) {
 // What the list and progress bar need about one color and value
 function summarize(key) {
   const cards = cardsOf(key);
-  const s = { key, cards, sigs: 0, reviewed: 0, approved: 0, rejected: 0, todo: 0, flagged: 0, errors: 0 };
+  const s = { key, cards, sigs: 0, reviewed: 0, approved: 0, retired: 0, rejected: 0, todo: 0, flagged: 0, errors: 0 };
   cards.forEach(c => {
     s.sigs += c.sigs.length;
-    if (c.status === 'approved') { s.approved++; s.reviewed += c.sigs.length; }
+    if (c.status === 'approved' || c.status === 'retired') { s[c.status]++; s.reviewed += c.sigs.length; }
     else if (c.status === 'rejected') s.rejected++;
     else s.todo++;
-    if (c.warnings.length || c.errors.length) s.flagged++;
+    // Flags still to check: approving or retiring a card settles its flags
+    if ((c.warnings.length || c.errors.length) && !isSettled(c)) s.flagged++;
     if (c.errors.length) s.errors++;
   });
   s.copies = copiesOf(key);
   s.over = s.copies > 0 && cards.length > s.copies;
   s.draft = !!drafts[key];
-  s.done = cards.length > 0 && s.approved === cards.length;
+  s.done = cards.length > 0 && s.approved + s.retired === cards.length;
   s.ready = s.done && !s.errors;
   return s;
 }
@@ -640,6 +717,8 @@ function categoryKeys() {
     .sort((a, b) => a.localeCompare(b) || valueSortKey(splitKey(a)[1]).localeCompare(valueSortKey(splitKey(b)[1])));
   return keys.concat(extra);
 }
+
+const isSettled = c => c.status === 'approved' || c.status === 'retired';
 
 // ── Changes ────────────────────────────────────────────────────────────────
 // Editing a card's signatures takes back its approval, so it gets looked at again
@@ -704,16 +783,16 @@ function addSignature(key, cid) {
   return tmp;
 }
 
-// Approve or reject a card; picking the same one again clears it
+// Approve, reject or retire a card; picking the same one again clears it
 function setStatus(key, cid, want) {
   const card = cardsOf(key).find(c => c.cid === cid);
   if (!card) return;
   const d = draftFor(key);
   const next = card.status === want ? null : want;
   popCid = cid;
-  if (next === 'approved' && card.savedOk) delete d.status[cid];
+  if (next && next === card.savedStatus) delete d.status[cid];
   else if (next === null) {
-    if (card.savedOk) d.status[cid] = 'unreviewed';
+    if (card.savedStatus) d.status[cid] = 'unreviewed';
     else delete d.status[cid];
   } else d.status[cid] = next;
   tidy(key);
@@ -761,8 +840,13 @@ function renderProgress(sums) {
     c.total += s.sigs; c.done += s.reviewed;
     byColor.set(color, c);
   });
-  let total = 0, done = 0;
+  let total = 0, done = 0, flagged = 0, over = 0;
   byColor.forEach(c => { total += c.total; done += c.done; });
+  sums.forEach(s => { flagged += s.flagged; if (s.over) over++; });
+  const flagParts = [flagged ? plural(flagged, 'flagged card') : '', over ? `${plural(over, 'value')} over the deck’s count` : ''].filter(Boolean);
+  const flags = flagParts.length
+    ? `<button type="button" class="flag-jump" id="flagJump" title="Go to the next color and value with something to check">${I.warn}${flagParts.join(' · ')}</button>`
+    : `<span class="flag-jump none">${I.check}No flags left</span>`;
   const segs = [...byColor].filter(([, c]) => c.total).map(([color, c]) =>
     `<div class="seg suit" style="flex:${c.total} 1 0;${suitStyle(color)}" title="${esc(color)}: ${c.done.toLocaleString()} of ${c.total.toLocaleString()} reviewed">
       <div class="seg-fill" style="width:${(100 * c.done / c.total).toFixed(2)}%"></div></div>`).join('');
@@ -771,7 +855,7 @@ function renderProgress(sums) {
   document.getElementById('progress').innerHTML = `
     <div class="progress" role="progressbar" aria-label="Signatures reviewed" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${done}">${segs}</div>
     <p class="progress-text"><span><strong>${(total - done).toLocaleString()} / ${total.toLocaleString()}</strong> signatures left to review</span>
-      <span class="legend">${legend}</span></p>`;
+      ${flags}<span class="legend">${legend}</span></p>`;
 }
 
 function renderList(keys, sums) {
@@ -837,8 +921,9 @@ function cardTile(key, c, i) {
     problems.length ? `<span class="chip-ic warn" title="${esc(problems.join('\n'))}">${I.warn}</span>` : '',
     c.status === 'rejected' ? `<span class="chip-ic bad${pop}" title="Rejected: needs fixing">${I.x}</span>` : '',
     c.status === 'approved' ? `<span class="chip-ic ok${pop}" title="Approved">${I.check}</span>` : '',
+    c.status === 'retired' ? `<span class="chip-ic gone${pop}" title="Retired: out of the deck">${I.retire}</span>` : '',
   ].join('');
-  const title = `${catName(key)} · ${cardLabel(c.cid)} (${c.cid})${c.stale ? ' · changed since it was approved' : ''}`;
+  const title = `${catName(key)} · ${cardLabel(c.cid)} (${c.cid})${c.stale ? ` · changed since it was ${c.stale}` : ''}`;
   return `<div class="card-wrap" data-cid="${esc(c.cid)}" style="animation-delay:${Math.min(i, 16) * 15}ms">
     <div class="card-lift">
       <button type="button" class="uno-card suit${c.status ? ' st-' + c.status : ''}" style="${suitStyle(splitKey(key)[0])}" data-open="${esc(c.cid)}" title="${esc(title)}">
@@ -853,6 +938,7 @@ function cardTile(key, c, i) {
     <div class="card-actions">
       <button type="button" class="act approve" data-status="approved" aria-pressed="${c.status === 'approved'}" title="Approve: it’s right" aria-label="Approve ${esc(cardLabel(c.cid))}">${I.check}</button>
       <button type="button" class="act reject" data-status="rejected" aria-pressed="${c.status === 'rejected'}" title="Reject: needs fixing" aria-label="Reject ${esc(cardLabel(c.cid))}">${I.x}</button>
+      <button type="button" class="act retire" data-status="retired" aria-pressed="${c.status === 'retired'}" title="Retire: lost or ruined, out of the deck" aria-label="Retire ${esc(cardLabel(c.cid))}">${I.retire}</button>
     </div>
   </div>`;
 }
@@ -864,12 +950,17 @@ function renderMain(s) {
   const changed = key !== shownKey;
   shownKey = key;
 
+  // Retired cards wait in their own section at the bottom
+  const active = s.cards.filter(c => c.status !== 'retired');
+  const retired = s.cards.filter(c => c.status === 'retired');
   let grid = '';
   if (!s.cards.length) {
     grid = `<p class="empty">No signed ${esc(name)} cards yet.</p>`;
+  } else if (!active.length) {
+    grid = '';
   } else if (groupByFirst) {
     const groups = new Map();
-    s.cards.forEach(c => {
+    active.forEach(c => {
       const f = c.first.trim() || '(no name)';
       if (!groups.has(f)) groups.set(f, []);
       groups.get(f).push(c);
@@ -879,7 +970,12 @@ function renderMain(s) {
       `<section class="group"><h3 class="group-head">${esc(possessive(f))} cards<span class="count">· ${groups.get(f).length}</span></h3>
         <div class="cards-grid">${groups.get(f).map(c => cardTile(key, c, i++)).join('')}</div></section>`).join('');
   } else {
-    grid = `<div class="cards-grid">${s.cards.map((c, i) => cardTile(key, c, i)).join('')}</div>`;
+    grid = `<div class="cards-grid">${active.map((c, i) => cardTile(key, c, i)).join('')}</div>`;
+  }
+  if (retired.length) {
+    grid += `<details class="retired-box" id="retiredBox"${retiredOpen ? ' open' : ''}>
+      <summary>${I.retire}Retired<span class="count">· ${retired.length}</span><span class="sub">Out of the deck. Nothing to review.</span></summary>
+      <div class="cards-grid">${retired.map((c, i) => cardTile(key, c, i)).join('')}</div></details>`;
   }
 
   const left = [
@@ -889,8 +985,8 @@ function renderMain(s) {
   ].filter(Boolean).join(' · ');
   let hint, hintCls = '';
   if (!s.cards.length) hint = '';
-  else if (s.done && !s.draft && !s.errors) { hint = 'Done. Every card is approved and saved to the sheet.'; hintCls = 'ok'; }
-  else if (s.ready) hint = 'Every card is approved. Mark it done to save your changes to the sheet.';
+  else if (s.done && !s.draft && !s.errors) { hint = 'Done. Every card is approved or retired, and saved to the sheet.'; hintCls = 'ok'; }
+  else if (s.ready) hint = 'Every card is approved or retired. Mark it done to save your changes to the sheet.';
   else hint = left + (s.draft ? '. Your changes are kept in this browser until you mark it done.' : '');
 
   const over = s.over ? `<div class="note">${I.warn}<span>${plural(s.cards.length, 'card')} logged, but the ${esc(DECKS[activeDeck].name)} deck only has
@@ -900,7 +996,7 @@ function renderMain(s) {
   panel.innerHTML = `
     <div class="detail-title suit" style="${suitStyle(color)}">
       <h2>${esc(name)}</h2>
-      <span class="sub">${plural(s.cards.length, 'card')} · ${plural(s.sigs, 'signature')}${s.copies ? ` · the deck has ${s.copies}` : ''}</span>
+      <span class="sub">${plural(s.cards.length, 'card')}${s.retired ? ` (${s.retired} retired)` : ''} · ${plural(s.sigs, 'signature')}${s.copies ? ` · the deck has ${s.copies}` : ''}</span>
     </div>
     ${over}
     ${s.cards.length ? `<div class="toolbar">
@@ -942,7 +1038,8 @@ function renderCardDialog() {
     const opts = options.map(o => `<option value="${esc(o.cid)}"${o.cid === s.cardId ? ' selected' : ''}>${esc(cardLabel(o.cid))}</option>`).join('')
       + `<option value="__new">New card</option>`;
     const missing = !s.signer.trim() || s.signer.trim() === '?';
-    return `<tr data-row="${esc(s.id)}" class="${c.dupDays.has(s.date) ? 'dup ' : ''}${s.changed ? 'changed' : ''}">
+    const flag = c.dupDays.has(s.date) || c.guessRows.has(s.id);
+    return `<tr data-row="${esc(s.id)}" class="${flag ? 'dup ' : ''}${s.changed ? 'changed' : ''}"${c.guessRows.has(s.id) ? ' title="Two cards fit this signature"' : ''}>
       <td class="num">${s.added ? 'new' : '#' + esc(s.id)}</td>
       <td><input type="text" data-f="signer" list="signerList" value="${esc(s.signer)}" aria-label="Signer" autocomplete="off" autocapitalize="words"${missing ? ' class="missing"' : ''}></td>
       <td><input type="date" data-f="date" value="${esc(s.date)}" aria-label="Date"${s.date ? '' : ' class="missing"'}></td>
@@ -956,12 +1053,12 @@ function renderCardDialog() {
       <div>
         <p class="kick">${esc(color)} ${esc(value)}</p>
         <h2 id="cardDlgTitle">${esc(cardLabel(c.cid))}<span class="cid mono">${esc(c.cid)}</span></h2>
-        <div class="chips">${c.status === 'approved' ? `<span class="ic ok">${I.check}</span>` : c.status === 'rejected' ? `<span class="ic bad">${I.x}</span>` : ''}</div>
+        <div class="chips">${{ approved: `<span class="ic ok">${I.check}</span>`, rejected: `<span class="ic bad">${I.x}</span>`, retired: `<span class="ic gone">${I.retire} Retired</span>` }[c.status] || ''}</div>
       </div>
       <button type="button" class="btn btn-sm dlg-close" data-close aria-label="Close">${I.close}</button>
     </div>
     ${problems.length ? `<ul class="flag-list">${problems.map(p => `<li>${esc(p)}</li>`).join('')}</ul>` : ''}
-    ${c.stale ? `<p class="muted-note">This card was approved before, but its signatures have changed since.</p>` : ''}
+    ${c.stale ? `<p class="muted-note">This card was ${c.stale} before, but its signatures have changed since.</p>` : ''}
     <div class="table-wrap"><table class="sig-table">
       <thead><tr><th>Win</th><th>Signer</th><th>Date</th><th>Card</th><th><span hidden>Delete</span></th></tr></thead>
       <tbody>${rows}</tbody>
@@ -970,6 +1067,7 @@ function renderCardDialog() {
       <button type="button" class="btn btn-sm" id="addSig">${I.plus}Add signature</button>
       <span class="spacer"></span>
       <button type="button" class="btn btn-sm btn-danger" id="delCard">${I.trash}Delete card</button>
+      <button type="button" class="btn btn-sm st-retire" id="retireCard" aria-pressed="${c.status === 'retired'}" title="Lost or ruined, out of the deck">${I.retire}Retire</button>
       <button type="button" class="btn btn-sm st-reject" id="rejectCard" aria-pressed="${c.status === 'rejected'}">${I.x}Reject</button>
       <button type="button" class="btn btn-sm st-approve" id="approveCard" aria-pressed="${c.status === 'approved'}">${I.check}Approve</button>
     </div>`;
@@ -1024,8 +1122,8 @@ function onDialogClick(e) {
     const label = cardLabel(openCid);
     deleteCard(key, openCid);
     showToast(`Deleted ${label}. It leaves the sheet when you mark ${catName(key)} done.`);
-  } else if (b.id === 'approveCard' || b.id === 'rejectCard') {
-    setStatus(key, openCid, b.id === 'approveCard' ? 'approved' : 'rejected');
+  } else if (b.id === 'approveCard' || b.id === 'rejectCard' || b.id === 'retireCard') {
+    setStatus(key, openCid, { approveCard: 'approved', rejectCard: 'rejected', retireCard: 'retired' }[b.id]);
   } else return;
   render();
 }
@@ -1065,6 +1163,19 @@ async function deleteRejected() {
   render();
 }
 
+// The next color and value, after this one, with a flag still to check
+function jumpToFlag() {
+  const keys = categoryKeys();
+  const i = keys.indexOf(selKey);
+  const order = keys.slice(i + 1).concat(keys.slice(0, i + 1));
+  const k = order.find(k => { const s = summarize(k); return s.flagged || s.over; });
+  if (!k) return;
+  if (k === selKey) { showToast(`${catName(k)} is the only one with flags left.`); return; }
+  selectCategory(k);
+  saveSel();
+  document.getElementById('mainPanel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
 // ── Saving ─────────────────────────────────────────────────────────────────
 async function markDone() {
   const key = selKey, name = catName(key);
@@ -1087,7 +1198,9 @@ async function markDone() {
   setSync('Saving…');
   render();
   try {
-    const res = await api('auditCommit', { color, value, ops, approve: s.cards.map(c => c.cid) });
+    const res = await api('auditCommit', { color, value, ops,
+      approve: s.cards.filter(c => c.status === 'approved').map(c => c.cid),
+      retire: s.cards.filter(c => c.status === 'retired').map(c => c.cid) });
     delete drafts[key];
     saveDrafts();
     setBase(res);
@@ -1171,13 +1284,15 @@ function openHelp() {
     <ol>
       <li><strong>Pick a color and value</strong> on the left.</li>
       <li><strong>Open a card</strong> to see every signature in order. Fix a name or date, move a signature to another card, add one that's missing, or delete one that never happened.</li>
-      <li><strong>Approve</strong> ${I.check} a card when it's right, or <strong>reject</strong> it when it needs fixing. Hover a card for both buttons. Rejected cards drop to the end, then approved ones.</li>
-      <li><strong>Mark done</strong> once every card is approved. That saves the color and value to the sheet.</li>
+      <li><strong>Approve</strong> ${I.check} a card when it's right, or <strong>reject</strong> ${I.x} it when it needs fixing. Hover a card for the buttons. Rejected cards drop to the end, then approved ones.</li>
+      <li><strong>Retire</strong> ${I.retire} a card that's lost or ruined. It moves to a Retired section and stays retired on later audits, unless someone logs a new signature on it.</li>
+      <li><strong>Mark done</strong> once every card is approved or retired. That saves the color and value to the sheet.</li>
     </ol>
     <h3>Good to know</h3>
     <ul>
       <li>Until you mark it done, changes are kept in this browser only. A red dot in the list means unsaved changes.</li>
-      <li>${I.warn} marks things to check: two signatures on the same day, a card ID that doesn't fit, or more cards than the deck has.</li>
+      <li>${I.warn} marks things to check: two signatures on the same day, a card ID that doesn't fit, more cards than the deck has, or <strong>two cards that fit</strong>. Past the first signer (the dot), a card doesn't show who signed in what order. So when a new signature leaves a card with the same names as another card plus a different new name, either card could be the one you held. Both cards get the flag.</li>
+      <li>The flag count up top counts cards you haven't approved or retired yet. Click it to jump to the next one.</li>
       <li>Deleted signatures and cards are removed from the sheet when you mark done. Their win numbers are left as gaps.</li>
     </ul>`;
   dlg.querySelector('[data-close]').addEventListener('click', () => dlg.close());
@@ -1200,16 +1315,19 @@ function wire() {
       const cid = act.closest('.card-wrap').dataset.cid;
       setStatus(selKey, cid, act.dataset.status);
       render();
-      // The card moves; keep keyboard focus on its buttons
-      const again = [...document.querySelectorAll('.card-wrap')].find(w => w.dataset.cid === cid);
-      if (document.activeElement === document.body) again?.querySelector(`.act[data-status="${act.dataset.status}"]`)?.focus({ preventScroll: true });
+      // The card moves. From the keyboard, keep focus on its buttons; after a click, let it go.
+      if (e.detail === 0) {
+        const again = [...document.querySelectorAll('.card-wrap')].find(w => w.dataset.cid === cid);
+        again?.querySelector(`.act[data-status="${act.dataset.status}"]`)?.focus({ preventScroll: true });
+      } else document.activeElement?.blur();
       return;
     }
     const card = e.target.closest('[data-open]');
     if (card) { openCard(card.dataset.open); return; }
     const b = e.target.closest('button');
     if (!b) return;
-    if (b.id === 'markDone') markDone();
+    if (b.id === 'flagJump') jumpToFlag();
+    else if (b.id === 'markDone') markDone();
     else if (b.id === 'delRejected') deleteRejected();
     else if (b.id === 'discard') {
       if (!confirmClick(b, 'Discard all changes?')) return;
@@ -1219,6 +1337,9 @@ function wire() {
       render();
     }
   });
+  content.addEventListener('toggle', e => {
+    if (e.target.id === 'retiredBox') retiredOpen = e.target.open;
+  }, true);
   content.addEventListener('change', e => {
     if (e.target.id !== 'groupFirst') return;
     groupByFirst = e.target.checked;

@@ -21,8 +21,8 @@ const AUDIT_TAB = 'Audit';
 // (an empty To means a one-day link; an empty Kind means a normal logging link).
 const LINK_HEADERS = ['Code', 'Deck', 'From', 'Created', 'First opened', 'Expires', 'Note', 'To', 'Kind'];
 const WIN_HEADERS = ['ID', 'Color', 'Value', 'Signer', 'Date', 'Card ID'];
-// One row per approved card. Fingerprint is the card's signatures when it was approved,
-// so the audit page can tell when a card changed afterwards. Color and value are part of
+// One row per approved or retired card (Status says which). Fingerprint is the card's
+// signatures when it was marked, so the audit page can tell when a card changed afterwards. Color and value are part of
 // the key because a mislogged win can share a card ID with a card of another value.
 const AUDIT_HEADERS = ['Deck', 'Color', 'Value', 'Card ID', 'Status', 'Fingerprint', 'Reviewed'];
 const LINK_HOURS = 24;     // a link works for this long after it's first opened
@@ -32,9 +32,15 @@ const MAX_PER_DAY_LINKS = 31;
 const MAX_NAME = 40;
 
 // Must match DECKS in signatures.html
+// Oldest first. The IDs are saved in links, so they never change (gridfetti is 3.0).
 const DECKS = {
-  gridfetti: { tab: 'Gridfetti 3.0', colors: ['Gold', 'Pink', 'Purple', 'Teal', 'Wild'] },
-  matrix:    { tab: 'Matrix',        colors: ['Blue', 'Green', 'Red', 'Yellow', 'Wild'] },
+  original:   { tab: 'Original',      colors: ['Blue', 'Green', 'Red', 'Yellow', 'Wild'] },
+  gridfetti1: { tab: 'Gridfetti 1.0', colors: ['Gold', 'Pink', 'Purple', 'Teal', 'Wild'] },
+  gridfetti2: { tab: 'Gridfetti 2.0', colors: ['Gold', 'Pink', 'Purple', 'Teal', 'Wild'] },
+  harvest:    { tab: 'Harvest',       colors: ['Banana', 'Berry', 'Orange', 'Plum', 'Wild'] },
+  discolight: { tab: 'Discolight',    colors: ['Blue', 'Green', 'Orange', 'Purple', 'Wild'] },
+  gridfetti:  { tab: 'Gridfetti 3.0', colors: ['Gold', 'Pink', 'Purple', 'Teal', 'Wild'] },
+  matrix:     { tab: 'Matrix',        colors: ['Blue', 'Green', 'Red', 'Yellow', 'Wild'] },
 };
 // The deck the share-link dialog starts on
 const DEFAULT_DECK = 'matrix';
@@ -169,7 +175,7 @@ const ACTIONS = {
 // ── Audit actions ──────────────────────────────────────────────────────────
 
 const AUDIT_ACTIONS = {
-  // The deck's whole history, plus which cards have been approved
+  // The deck's whole history, plus which cards have been approved or retired
   auditOpen(link) {
     return auditInfo(link, readWins(link.deck));
   },
@@ -178,7 +184,8 @@ const AUDIT_ACTIONS = {
   // ops: { op: 'edit', id, before, signer, date, cardId } | { op: 'add', signer, date, cardId }
   //    | { op: 'delete', id, before }. `before` is the win as the page saw it; if the sheet
   //    has changed since (someone fixed it from a logging link), nothing is saved.
-  // approve: every card ID of this color and value that's approved.
+  // approve / retire: every card ID of this color and value that's approved, or retired
+  //    (lost or ruined, so it won't be signed again).
   auditCommit(link, req) {
     const deck = DECKS[link.deck];
     const color = String(req.color || '');
@@ -187,7 +194,8 @@ const AUDIT_ACTIONS = {
     if ((color === 'Wild' ? WILD_VALUES : VALUES).indexOf(value) === -1) throw new ApiError('bad-request');
     const ops = Array.isArray(req.ops) ? req.ops : [];
     const approve = Array.isArray(req.approve) ? req.approve.map(String) : [];
-    if (ops.length > 2000 || approve.length > 2000) throw new ApiError('bad-request');
+    const retire = Array.isArray(req.retire) ? req.retire.map(String) : [];
+    if (ops.length > 2000 || approve.length > 2000 || retire.length > 2000) throw new ApiError('bad-request');
 
     const sheet = deckSheet(link.deck);
     let wins = readWins(link.deck);
@@ -229,9 +237,9 @@ const AUDIT_ACTIONS = {
     deletes.sort((a, b) => b.row - a.row).forEach(w => sheet.deleteRow(w.row));
     wins = readWins(link.deck);
 
-    // This color and value's approvals become exactly `approve`
+    // This color and value's rows become exactly `approve` and `retire`
     const signed = wins.filter(isSigned);
-    const ours = {};
+    const ours = Object.create(null);
     signed.forEach(w => { if (w.color === color && w.value === value) ours[w.cardId] = true; });
     const audit = auditSheet();
     const width = AUDIT_HEADERS.length;
@@ -243,8 +251,11 @@ const AUDIT_ACTIONS = {
       return signed.some(w => w.color === r[1] && w.value === r[2] && w.cardId === r[3]);
     }).map(r => r.map(asText));
     const now = Utilities.formatDate(new Date(), sheetTz(), 'yyyy-MM-dd HH:mm');
-    approve.filter((cid, i) => ours[cid] && approve.indexOf(cid) === i).forEach(cid => {
-      kept.push([link.deck, color, value, asText(cid), 'approved', fingerprint(signed, color, value, cid), now]);
+    const status = Object.create(null);
+    approve.forEach(cid => { status[cid] = 'approved'; });
+    retire.forEach(cid => { status[cid] = 'retired'; });
+    Object.keys(status).filter(cid => ours[cid]).forEach(cid => {
+      kept.push([link.deck, color, value, asText(cid), status[cid], fingerprint(signed, color, value, cid), now]);
     });
     if (rows.length) audit.getRange(2, 1, rows.length, width).clearContent();
     if (kept.length) audit.getRange(2, 1, kept.length, width).setNumberFormat('@').setValues(kept);
@@ -261,8 +272,8 @@ function auditInfo(link, wins) {
     wins: wins.map(w => ({
       id: w.id, color: w.color, value: w.value, signer: w.signer, date: w.date, cardId: w.cardId,
     })),
-    approvals: rows.filter(r => r[0] === link.deck && r[4] === 'approved')
-      .map(r => ({ color: r[1], value: r[2], cardId: r[3], fingerprint: r[5] })),
+    approvals: rows.filter(r => r[0] === link.deck && (r[4] === 'approved' || r[4] === 'retired'))
+      .map(r => ({ color: r[1], value: r[2], cardId: r[3], status: r[4], fingerprint: r[5] })),
   };
 }
 
@@ -292,7 +303,18 @@ function linkInfo(link, wins) {
     wins: wins.map(w => ({
       id: w.id, color: w.color, value: w.value, signer: w.signer, date: w.date, cardId: w.cardId,
     })),
+    retired: retiredCards(link.deck, wins),
   };
+}
+
+// Cards retired on an audit link, as long as nobody has signed them since
+function retiredCards(deck, wins) {
+  const s = SpreadsheetApp.getActive().getSheetByName(AUDIT_TAB);
+  if (!s || s.getLastRow() < 2) return [];
+  const signed = wins.filter(isSigned);
+  return s.getRange(2, 1, s.getLastRow() - 1, AUDIT_HEADERS.length).getDisplayValues()
+    .filter(r => r[0] === deck && r[4] === 'retired' && r[5] === fingerprint(signed, r[1], r[2], r[3]))
+    .map(r => ({ color: r[1], value: r[2], cardId: r[3] }));
 }
 
 function json(obj) {
@@ -401,9 +423,12 @@ function showLinkDialog() {
 function dialogData() {
   const today = todayKey();
   const to = latestWeekdayOnOrBefore(today);
+  const ss = SpreadsheetApp.getActive();
   return {
     defaultDeck: DEFAULT_DECK,
     decks: Object.keys(DECKS).map(id => {
+      // A deck without its tab yet is listed, but can't get links until Set up tabs makes it
+      if (!ss.getSheetByName(DECKS[id].tab)) return { id: id, name: DECKS[id].tab, from: to, to: to, missing: true };
       const latest = latestDay(id);
       let from = latest ? nextWeekday(latest) : to;
       if (from > to) from = to;  // already caught up

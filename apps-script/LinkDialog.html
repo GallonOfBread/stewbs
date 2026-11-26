@@ -173,7 +173,8 @@
     .withSuccessHandler(function (d) {
       data = d;
       $('deck').innerHTML = d.decks.map(function (x) {
-        return '<option value="' + esc(x.id) + '"' + (x.id === d.defaultDeck ? ' selected' : '') + '>' + esc(x.name) + '</option>';
+        return '<option value="' + esc(x.id) + '"' + (x.id === d.defaultDeck ? ' selected' : '') + (x.missing ? ' disabled' : '') + '>' +
+          esc(x.name) + (x.missing ? ' (no tab yet: run Set up tabs)' : '') + '</option>';
       }).join('');
       applyDefaults();
       renderActive(d.active);

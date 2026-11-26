@@ -148,6 +148,10 @@
   .sn .mult { color: var(--muted); font-variant-numeric: tabular-nums; }
   .sn.more .name { color: var(--muted); }
   .uno-card.new-card { border-style: dashed; background: transparent; }
+  /* Retired on an audit link: lost or ruined, so probably not the card in hand */
+  .uno-card.retired { opacity: .5; filter: grayscale(.85); }
+  .uno-card.retired:hover, .uno-card.retired.sel-card { opacity: .85; }
+  .retired-label { margin-top: auto; padding-top: 4px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
   /* Step 1 heading, with the first-signer dropdown on the right */
   .step-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; margin: 0 0 10px; }
   .step-head .section-label { margin: 0; }
@@ -332,8 +336,13 @@ const WILD_COLOR = '#7c7f87';
 // Physical decks we track. `scheme` names a color scheme in /uno-decks.js;
 // `colorKeys` are the keyboard shortcuts for picking a color on a new win.
 const DECKS = {
-  gridfetti: { name: 'Gridfetti 3.0', scheme: '90s', colorKeys: { g: 'Gold', r: 'Pink', p: 'Purple', t: 'Teal', w: 'Wild' } },
-  matrix:    { name: 'Matrix',        scheme: '00s', colorKeys: { b: 'Blue', g: 'Green', r: 'Red', y: 'Yellow', w: 'Wild' } },
+  original:   { name: 'Original',      scheme: '00s', colorKeys: { b: 'Blue', g: 'Green', r: 'Red', y: 'Yellow', w: 'Wild' } },
+  gridfetti1: { name: 'Gridfetti 1.0', scheme: '90s', colorKeys: { g: 'Gold', r: 'Pink', p: 'Purple', t: 'Teal', w: 'Wild' } },
+  gridfetti2: { name: 'Gridfetti 2.0', scheme: '90s', colorKeys: { g: 'Gold', r: 'Pink', p: 'Purple', t: 'Teal', w: 'Wild' } },
+  harvest:    { name: 'Harvest',       scheme: '70s', colorKeys: { b: 'Banana', e: 'Berry', o: 'Orange', p: 'Plum', w: 'Wild' } },
+  discolight: { name: 'Discolight',    scheme: '80s', colorKeys: { b: 'Blue', g: 'Green', o: 'Orange', p: 'Purple', w: 'Wild' } },
+  gridfetti:  { name: 'Gridfetti 3.0', scheme: '90s', colorKeys: { g: 'Gold', r: 'Pink', p: 'Purple', t: 'Teal', w: 'Wild' } },
+  matrix:     { name: 'Matrix',        scheme: '00s', colorKeys: { b: 'Blue', g: 'Green', r: 'Red', y: 'Yellow', w: 'Wild' } },
 };
 
 // Autofocus only with a mouse; on phones it pops the keyboard and jumps the page
@@ -344,6 +353,7 @@ let activeDeck    = 'matrix';   // replaced by the link's deck once it opens
 let COLOR_KEYS    = DECKS[activeDeck].colorKeys;
 
 let wins          = [];
+let retired       = new Set();  // "Blue|7|B7_3": cards retired on an audit link
 let selectedWinId = null;
 let acHl          = -1;
 let sortMode      = 'color'; // 'color' | 'chrono'
@@ -440,6 +450,7 @@ async function api(action, data) {
     throw new Error(res.error || 'server');
   }
   link = { deck: res.deck, from: res.from, to: res.to, expires: res.expires ? new Date(res.expires) : null };
+  if (res.retired) retired = new Set(res.retired.map(r => `${r.color}|${r.value}|${r.cardId}`));
   if (DECKS[res.deck]) { activeDeck = res.deck; COLOR_KEYS = DECKS[activeDeck].colorKeys; }
   updateHeader();
   return res;
@@ -684,9 +695,10 @@ function knownCardIds(color, value) {
   return ids.sort((a,b) => SUFFIX_SEQ.indexOf(a.slice(-1)) - SUFFIX_SEQ.indexOf(b.slice(-1)));
 }
 
-// Confirmed signers for a specific physical cardId (excludes '?')
-function signersForCardId(cid) {
-  return wins.filter(w => w.cardId === cid && w.signer && w.signer !== '?')
+// Confirmed signers for one physical card (excludes '?'). Color and value matter too:
+// Banana and Berry cards both start with B.
+function signersForCardId(cid, color, value) {
+  return wins.filter(w => w.cardId === cid && w.color === color && w.value === value && w.signer && w.signer !== '?')
              .sort((a,b) => parseInt(a.id) - parseInt(b.id));
 }
 
@@ -1216,14 +1228,15 @@ function renderDetail() {
   const cardIds = knownCardIds(win.color, win.value);
   const typeName = `${win.color} ${win.value}`;
 
-  // Sort cards by descending signature count
+  // Most-signed cards first; retired ones (out of the deck) at the end
+  const isRetired = cid => retired.has(`${win.color}|${win.value}|${cid}`);
   const cards = cardIds.map(cid => {
-    const sigWins = signersForCardId(cid);
-    return { cid, sigWins };
-  }).sort((a,b) => b.sigWins.length - a.sigWins.length);
+    const sigWins = signersForCardId(cid, win.color, win.value);
+    return { cid, sigWins, gone: isRetired(cid) };
+  }).sort((a,b) => a.gone - b.gone || b.sigWins.length - a.sigWins.length);
 
   const tiles = { order: [], html: {}, first: {}, newCid: '', win };
-  cards.forEach(({cid, sigWins}) => {
+  cards.forEach(({cid, sigWins, gone}) => {
     const firstSigner = sigWins.length ? sigWins[0].signer : null;
     // Aggregate by name, alpha sorted
     const byName = {};
@@ -1239,11 +1252,12 @@ function renderDetail() {
         <span class="mult">${byName[name]>1?`×${byName[name]}`:''}</span>
       </div>`).join('');
     if (names.length > MAX_SHOW) sigHTML += `<div class="sn more"><span class="star"></span><span class="name">+${names.length-MAX_SHOW} more</span><span class="mult"></span></div>`;
+    if (gone) sigHTML += `<div class="retired-label">Retired</div>`;
 
     tiles.order.push(cid);
     tiles.first[cid] = firstSigner;
     tiles.html[cid] = `
-      <button type="button" class="uno-card suit" style="${style}" data-cid="${esc(cid)}" title="${esc(typeName)} · ${esc(cardLabel(cid))}">
+      <button type="button" class="uno-card suit${gone ? ' retired' : ''}" style="${style}" data-cid="${esc(cid)}" title="${esc(typeName)} · ${esc(cardLabel(cid))}${gone ? ' · retired (lost or ruined). Logging a win on it brings it back.' : ''}">
         <div class="card-head">
           <div class="card-meta"><span class="card-num">${esc(cardLabel(cid))}</span><span>${sigWins.length} total</span></div>
           <div class="cval">${esc(win.value)}</div>
